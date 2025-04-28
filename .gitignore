@@ -3,3 +3,4 @@ data/
 *.pyc
 tmp_poetry/*
 cache_poetry/*
+.venv/*
