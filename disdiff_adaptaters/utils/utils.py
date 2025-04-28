@@ -10,7 +10,8 @@ def load_h5(h5_path) :
 def split(data, label, ratio: int=0.8) :
 
     idx = torch.randperm(len(data))
-    
+    idx, _ = torch.sort(idx)
+
     train_idx = idx[:int(len(data)*ratio)]
     val_idx = idx[int(len(data)*ratio) : int(len(data)*(ratio+(1-ratio)/2))]
     test_idx = idx[int(len(data)*(ratio+(1-ratio)/2)):]

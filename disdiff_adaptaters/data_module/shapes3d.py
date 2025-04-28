@@ -30,9 +30,9 @@ class Shapes3DDataModule(LightningDataModule) :
             images, labels = load_h5(self.h5_path)
             train_images, train_labels, val_images, val_labels, test_images, test_labels = split(images, labels)
 
-            train_images = train_images.permute(2,0,1)
-            val_images = val_images.permute(2,0,1)         
-            test_images = test_images.permute(2,0,1)
+            train_images = train_images.permute(0,3,1,2)
+            val_images = val_images.permute(0,3,1,2)         
+            test_images = test_images.permute(0,3,1,2)
 
             torch.save((train_images, train_labels), self.train_path)
             torch.save((val_images, val_labels), self.val_path)
