@@ -4,4 +4,4 @@ data/
 tmp_poetry/*
 cache_poetry/*
 .venv/*
-.python-version/*
+.python-version*
