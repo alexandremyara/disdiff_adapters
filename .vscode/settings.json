@@ -2,6 +2,6 @@
     "python.analysis.extraPaths": [
         "../",
         "./",
-        "/home/alexandre/.cache/pypoetry/virtualenvs/disdiff-adaptaters-m1Sdj2Jl-py3.10/lib/python3.10/site-packages"
+        "/projects/compures/disdiff_adaptaters/.venv/lib/python3.11/site-packages"
     ]
 }

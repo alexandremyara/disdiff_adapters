@@ -1,0 +1,24 @@
+{
+    "folders": [
+        {"path": ".."},
+
+    ],
+
+    "settings": {
+        "files.exclude": {
+            ".venv/": true,
+        },
+
+        "files.watcherExclude": {
+            "**/.git/objects/**": true,
+            "**/.git/subtree-cache/**": true,
+            "**/.venv/**": true,
+            "**/venv/**": true,
+            "**/__pycache__/**": true,
+            "**/data/**": true
+            }
+
+    },
+
+    
+}
