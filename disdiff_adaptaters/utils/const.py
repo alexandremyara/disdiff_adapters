@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass
 
-PROJECT_PATH="/projects/compures/alexandre/disdiff_adaptaters"
+PROJECT_PATH=os.getenv("IBENS_PROJECT_PATH")
 
 @dataclass
 class Shapes3D :
@@ -27,3 +27,7 @@ class ChAda :
     @dataclass
     class Path :
         WEIGHTS = os.path.join(PROJECT_PATH, "disdiff_adaptaters/arch/weights.ckpt")
+
+    @dataclass
+    class Config :
+        BASE = {"patch_size": 16, "embed_dim": 192, "return_all_tokens": False, "max_number_channels": 10}
