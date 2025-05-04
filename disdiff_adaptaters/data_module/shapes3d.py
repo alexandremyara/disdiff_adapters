@@ -58,10 +58,8 @@ class Shapes3DDataModule(LightningDataModule) :
     def setup(self, stage) :
         if stage in ("fit", None) :
             train_images, train_labels = torch.load(self.train_path)
-            val_images, val_labels = torch.load(self.val_path)
 
             self.train_dataset = Shapes3DDataset(train_images, train_labels)
-            self.val_dataset = Shapes3DDataset(val_images, val_labels)
         else :
             test_images, test_labels = torch.load(self.test_path)
             self.test_dataset = Shapes3DDataset(test_images, test_labels)
