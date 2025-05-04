@@ -12,6 +12,7 @@ class Shapes3D :
         TRAIN = os.path.join(PROJECT_PATH, "disdiff_adaptaters/data/shapes3d_train.pt")
         VAL = os.path.join(PROJECT_PATH, "disdiff_adaptaters/data/shapes3d_val.pt")
         TEST = os.path.join(PROJECT_PATH, "disdiff_adaptaters/data/shapes3d_test.pt")
+        NPZ = os.path.join(PROJECT_PATH, "disdiff_adaptaters/data/3dshapes/split_3dshapes.npz")
 
     @dataclass
     class Params :

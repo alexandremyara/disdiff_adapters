@@ -2,6 +2,7 @@ import lightning as L
 from lightning import LightningDataModule
 import torch
 from torch.utils.data import DataLoader
+import numpy as np
 
 from os.path import join, exists
 
@@ -23,20 +24,35 @@ class Shapes3DDataModule(LightningDataModule) :
         self.ratio = ratio
         self.batch_size = batch_size
 
-    def prepare_data(self):
+    def prepare_data(self, is_h5=False):
 
-        if not (exists(self.train_path) and exists(self.val_path) and exists(self.test_path)):
+        if not (exists(self.train_path) and exists(self.test_path)):
+            if is_h5 :
+                print("h5 file loading.")
+                images, labels = load_h5(self.h5_path)
+                train_images, train_labels, test_images, test_labels = split(images, labels)
+            else :
+                print("npz file loading.")
+                data = np.load(Shapes3D.Path.NPZ)
+                train_images = data["train_images.npy"]
+                train_images = torch.from_numpy(train_images)
 
-            images, labels = load_h5(self.h5_path)
-            train_images, train_labels, val_images, val_labels, test_images, test_labels = split(images, labels)
+                train_labels = data["train_labels.npy"]
+                train_labels = torch.from_numpy(train_labels)
 
-            train_images = train_images.permute(0,3,1,2)
-            val_images = val_images.permute(0,3,1,2)         
-            test_images = test_images.permute(0,3,1,2)
+                test_images = data["test_images.npy"]
+                test_images = torch.from_numpy(test_images)
 
+                test_labels = data["test_labels.npy"]
+                test_labels = torch.from_numpy(test_labels)
+
+            train_images = (train_images.permute(0,3,1,2)/255).to(torch.float32)    
+            test_images = (test_images.permute(0,3,1,2)/255).to(torch.float32)
+
+            print("save tensors\n")
             torch.save((train_images, train_labels), self.train_path)
-            torch.save((val_images, val_labels), self.val_path)
             torch.save((test_images, test_labels), self.test_path)
+
         else : pass
 
     def setup(self, stage) :

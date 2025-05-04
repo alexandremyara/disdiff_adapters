@@ -31,23 +31,22 @@ def split(data, label, ratio: int=0.8) :
         Tensors for each data/label set.
 
     """
+    print("start split from h5 file")
 
     idx = torch.randperm(len(data))
 
     train_idx, _ = sort(idx[:int(len(data)*ratio)])
-    val_idx, _ = sort(idx[int(len(data)*ratio) : int(len(data)*(ratio+(1-ratio)/2))])
-    test_idx, _ = sort(idx[int(len(data)*(ratio+(1-ratio)/2)):])
+    
+    test_idx, _ = sort(idx[int(len(data)*(ratio)):])
 
     train_data = data[train_idx]
     train_label = label[train_idx]
 
-    val_data = data[val_idx]
-    val_label = label[val_idx]
-
     test_data = data[test_idx]
     test_label = label[test_idx]
+    print("end split")
 
-    return torch.tensor(train_data), torch.tensor(train_label), torch.tensor(val_data), torch.tensor(val_label), torch.tensor(test_data), torch.tensor(test_label)
+    return torch.tensor(train_data), torch.tensor(train_label), torch.tensor(test_data), torch.tensor(test_label)
 
 def collate_images(batch: list):
     """

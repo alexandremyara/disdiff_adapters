@@ -16,7 +16,6 @@
             "/projects/compures/alexandre/disdiff_adaptaters/.venv": true,
             "**/venv/**": true,
             "**/__pycache__/**": true,
-            "**/data/**": true
             }
 
     },
