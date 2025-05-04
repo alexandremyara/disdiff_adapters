@@ -3,5 +3,9 @@
         "../",
         "./",
         "/projects/compures/disdiff_adaptaters/.venv/lib/python3.11/site-packages"
-    ]
+    ],
+
+    "python.envFile": "../.env"
+
+
 }

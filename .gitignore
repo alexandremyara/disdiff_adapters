@@ -1,7 +1,8 @@
-data/*
+disdiff_adaptaters/data/*
 *.ckpt
 *.pyc
 tmp_poetry/*
 cache_poetry/*
 .venv/*
 .python-version*
+.env
