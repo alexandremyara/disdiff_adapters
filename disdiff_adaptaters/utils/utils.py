@@ -3,6 +3,9 @@ from typing import Union
 import torch
 from torch import sort
 import numpy as np
+import matplotlib.pyplot as plt
+
+from sklearn.decomposition import PCA
 
 def load_h5(h5_path: str) :
     """
@@ -84,3 +87,47 @@ def collate_images(batch: list):
     batched_labels = torch.tensor(labels_list)
 
     return channels_list, batched_labels, num_channels_list
+
+def display(batch: list) :
+    """
+    batch_size is always a power of 2.
+    """
+    nb_samples = len(batch[0]) #batch_size
+    nb_col = np.log2(nb_samples)
+    nb_row = np.log2(nb_samples)
+    fig, axes = plt.subplots(int(nb_row), int(nb_col), figsize=(10,7))
+
+    images, labels = batch
+
+    for i in range(nb_samples):
+        ax = axes[int(i//nb_row),int(i%nb_col)]
+
+        img = (images[i]*255).to(torch.uint8)
+        ax.imshow(img.permute(1,2,0).numpy())
+        ax.set_title(f"{labels[i].numpy()}")
+
+def pca_latent(feats: torch.Tensor, labels: torch.Tensor) :
+    pca = PCA(n_components=2)
+    latent = []
+
+    unique_labels = np.unique(labels)
+    colors = plt.cm.tab10.colors
+
+    label_to_color = {label: colors[i % len(colors)] for i, label in enumerate(unique_labels)}
+
+    for mu, logvar in list(zip(*feats)) :
+        eps = torch.randn_like(logvar)
+        z = mu+torch.exp(0.5*logvar)*eps
+        latent.append(z.detach().cpu().numpy())
+
+    latent = np.asarray(latent)
+    latent_pca = pca.fit_transform(latent)
+
+    for label in unique_labels:
+        idx = labels.squeeze(0) == label
+        pts = latent_pca[idx.squeeze(1)]
+        plt.scatter(pts[:, 0], pts[:, 1],
+                    color=label_to_color[label], label=label, alpha=0.7)
+        plt.legend()
+    plt.grid()
+    plt.show()

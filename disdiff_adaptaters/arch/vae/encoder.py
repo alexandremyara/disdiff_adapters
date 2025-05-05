@@ -11,11 +11,10 @@ class Encoder(nn.Module):
     def __init__(self, input_channels: int, latent_dim: int):
         super().__init__()
 
-        self.n_layers = 3
         self.input_channels = input_channels
 
         self.net = nn.Sequential(
-            # in_channelsx128x128 -> 48x64x64
+            # in_channelsx28x28 -> 48x64x64
             nn.Conv2d(self.input_channels, 48, kernel_size=3, stride=2, padding=1),
             nn.ELU(),
             # 48x64x64 -> 48x64x64
@@ -40,7 +39,7 @@ class Encoder(nn.Module):
             nn.Conv2d(384, 384, kernel_size=3, stride=1, padding=1),
             nn.ELU(),
             nn.Flatten(),
-            nn.Linear(384*8*8, latent_dim * 2),
+            nn.Linear(384*2*2, latent_dim * 2),
         )
     
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
