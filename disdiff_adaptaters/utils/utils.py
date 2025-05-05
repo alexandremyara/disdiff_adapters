@@ -106,7 +106,7 @@ def display(batch: list) :
         ax.imshow(img.permute(1,2,0).numpy())
         ax.set_title(f"{labels[i].numpy()}")
 
-def pca_latent(feats: torch.Tensor, labels: torch.Tensor) :
+def pca_latent(feats: tuple[torch.Tensor], labels: torch.Tensor) :
     pca = PCA(n_components=2)
     latent = []
 

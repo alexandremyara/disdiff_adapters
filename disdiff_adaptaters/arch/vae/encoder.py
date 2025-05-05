@@ -2,47 +2,30 @@ import torch
 import torch.nn as nn
 
 class Encoder(nn.Module):
-    """
-    VAE Encoder.
-    
-    See VAE docstring.
-    """
-    
-    def __init__(self, input_channels: int, latent_dim: int):
+    def __init__(self, input_channels: int, input_size: int, latent_dim: int):
         super().__init__()
+        self.latent_dim = latent_dim
 
-        self.input_channels = input_channels
-
-        self.net = nn.Sequential(
-            # in_channelsx28x28 -> 48x64x64
-            nn.Conv2d(self.input_channels, 48, kernel_size=3, stride=2, padding=1),
-            nn.ELU(),
-            # 48x64x64 -> 48x64x64
-            nn.Conv2d(48, 48, kernel_size=3, stride=1, padding=1),
-            nn.ELU(),
-            # 48x64x64 -> 96x32x32
-            nn.Conv2d(48, 96, kernel_size=3, stride=2, padding=1),
-            nn.ELU(),
-            # 96x32x32 -> 96x32x32
-            nn.Conv2d(96, 96, kernel_size=3, stride=1, padding=1),
-            nn.ELU(),
-            # 96x32x32 -> 192x16x16
-            nn.Conv2d(96, 192, kernel_size=3, stride=2, padding=1),
-            nn.ELU(),
-            # 192x16x16 -> 192x16x16
-            nn.Conv2d(192, 192, kernel_size=3, stride=1, padding=1),
-            nn.ELU(),
-            # 192x16x16 -> 384x8x8
-            nn.Conv2d(192, 384, kernel_size=3, stride=2, padding=1),
-            nn.ELU(),
-            # 384x8x8 -> 384x8x8
-            nn.Conv2d(384, 384, kernel_size=3, stride=1, padding=1),
-            nn.ELU(),
-            nn.Flatten(),
-            nn.Linear(384*2*2, latent_dim * 2),
+        self.features = nn.Sequential(
+            nn.Conv2d(input_channels, 48, kernel_size=3, stride=2, padding=1), nn.ELU(),
+            nn.Conv2d(48, 48, kernel_size=3, stride=1, padding=1), nn.ELU(),
+            nn.Conv2d(48, 96, kernel_size=3, stride=2, padding=1), nn.ELU(),
+            nn.Conv2d(96, 96, kernel_size=3, stride=1, padding=1), nn.ELU(),
+            nn.Conv2d(96, 192, kernel_size=3, stride=2, padding=1), nn.ELU(),
+            nn.Conv2d(192, 192, kernel_size=3, stride=1, padding=1), nn.ELU()
         )
-    
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        latent_repr: torch.Tensor = self.net(x)
-        mu, logvar = torch.chunk(latent_repr, 2, dim=1)
+
+        # calcul automatique de la taille aplatie après convolutions
+        with torch.no_grad():
+            dummy = torch.zeros(1, input_channels, input_size, input_size)
+            out = self.features(dummy)
+            print(out.shape)
+            self.flattened_size = out.shape[1]*out.shape[2]*out.shape[3]
+
+        self.fc = nn.Sequential(nn.Flatten(),nn.Linear(self.flattened_size, latent_dim * 2))
+
+    def forward(self, x):
+        x = self.features(x)
+        x = self.fc(x)
+        mu, logvar = torch.chunk(x, 2, dim=1)
         return mu, logvar

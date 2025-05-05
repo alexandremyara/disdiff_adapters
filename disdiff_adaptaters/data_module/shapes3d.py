@@ -52,17 +52,20 @@ class Shapes3DDataModule(LightningDataModule) :
             print("save tensors\n")
             torch.save((train_images, train_labels), self.train_path)
             torch.save((test_images, test_labels), self.test_path)
+            print("tensors saved.")
 
         else : pass
 
     def setup(self, stage) :
         if stage in ("fit", None) :
+            print("loading of tensors")
             train_images, train_labels = torch.load(self.train_path)
 
             self.train_dataset = Shapes3DDataset(train_images, train_labels)
         else :
             test_images, test_labels = torch.load(self.test_path)
             self.test_dataset = Shapes3DDataset(test_images, test_labels)
+        print("tensors loaded.")
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True)
