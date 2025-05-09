@@ -1,12 +1,17 @@
+#Import from site packages
 import lightning as L
 from matplotlib import pyplot as plt
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
 
+#Import from this module (vae)
 from disdiff_adaptaters.arch.vae.encoder import Encoder
 from disdiff_adaptaters.arch.vae.decoder import Decoder
 
+#Import from other modules
+from disdiff_adaptaters.loss import kl, mse
+from disdiff_adaptaters.utils import sample_from
 
 class VAE(L.LightningModule):
 
@@ -14,58 +19,24 @@ class VAE(L.LightningModule):
     def __init__(
         self,
         in_channels: int=4,
+        img_size: int=64,
         latent_dim: int=2,
-        loss_reg: str="beta_vae",
-        beta: float=1.0,
-        gamma: float=1.0,
-    ):
+        beta: float=1.0):
         super().__init__()
         
         self.save_hyperparameters()
         
-        self.encoder = Encoder(self.hparams.in_channels, self.hparams.latent_dim)
-        self.decoder = Decoder(self.hparams.in_channels, self.hparams.latent_dim)
+        self.encoder = Encoder(input_channels=self.hparams.in_channels,
+                               img_size=self.hparams.img_size,
+                               latent_dim=self.hparams.latent_dim)
         
-        # To keep track of test set and generated samples during test time, to
-        # compute FRDS
-        self.x_buffer: list[torch.Tensor] = []
-        self.x_fake_logits_buffer: list[torch.Tensor] = []
+        self.decoder = Decoder(latent_dim=self.hparams.latent_dim,
+                               out_shape=(in_channels, img_size, img_size),
+                               out_encoder_shape=self.encoder.out_encoder_shape)       
 
     def configure_optimizers(self):
         return optim.Adam(self.parameters(), lr=6e-5, weight_decay=1e-2)
-    
-    def _kl_divergence(
-        self,
-        mu: torch.Tensor,
-        logvar: torch.Tensor,
-        marginal: bool=False,
-    ) -> torch.Tensor:
-        if marginal:
-            return -0.5 * torch.mean(
-                1 + logvar - mu.pow(2) - logvar.exp(),
-                dim=0,
-            )
-        
-        return -0.5 * torch.sum(
-            1 + logvar - mu.pow(2) - logvar.exp(),
-            dim=1,
-        ).mean()
-        
-    def reconstruction_loss(self, x: torch.Tensor, x_hat_logits: torch.Tensor) -> torch.Tensor:
-        """
-        Compute the reconstruction loss using cross-entropy.
-        
-        Args:
-            x (torch.Tensor): One-hot encoded input segmentations.
-            x_hat_logits (torch.Tensor): Logits of reconstruction of input
-                (output of decoder).
-        
-        Returns:
-            recon_loss (torch.Tensor): Reconstruction loss.
-        """
-        batch_size = x.size(0)
-        return F.cross_entropy(x_hat_logits, x, reduction="sum") / batch_size
-    
+          
     def loss(
         self,
         x: torch.Tensor,
@@ -79,43 +50,21 @@ class VAE(L.LightningModule):
         Compute the beta-VAE loss: sum of reconstruction loss and beta-weighted
         KL divergence regulariser term.
         """
-        recon_loss = self.reconstruction_loss(x, x_hat_logits)
-        kl_div = self._kl_divergence(mu, logvar)
+        recon_loss = mse(x_hat_logits, x)
+        kl_div = kl(mu, logvar)
 
         weighted_kl_div = self.hparams.beta * kl_div
         
         if log_components:
-            marginal_kl_div = self._kl_divergence(mu, logvar, marginal=True)
+            kl_by_latent = kl(mu, logvar, kl_by_latent=True)
             
             self.log("loss/recon", recon_loss)
             self.log("loss/kl_div", weighted_kl_div)
-            for i, marginal_kl in enumerate(marginal_kl_div):
+
+            for i, marginal_kl in enumerate(kl_by_latent):
                 self.log(f"loss/marginal_kl_div/dim_{i}", marginal_kl)
         
         return recon_loss + weighted_kl_div
-    
-    def _reparameterise(
-        self,
-        mu: torch.Tensor,
-        logvar: torch.Tensor,
-        test: bool=False,
-    ) -> torch.Tensor:
-        # z_m = mu(x_m) + sigma(x_m) * epsilon
-        # epsilon ~ N(0, 1)
-        
-        eps = torch.randn_like(logvar)
-        
-        if test:
-            return mu
-        return mu + torch.exp(0.5 * logvar) * eps
-    
-    def get_latent(self, x: torch.Tensor, test: bool=False) -> torch.Tensor:
-        """
-        Given an input tensor, return its latent representation z by passing it
-        through the encoder.
-        """
-        mu, logvar = self.encoder(2 * x - 1.0)
-        return self._reparameterise(mu, logvar, test)
 
     def forward(
         self,
@@ -134,9 +83,10 @@ class VAE(L.LightningModule):
             z (torch.Tensor): Latent representation of input.
             x_hat_logits (torch.Tensor): Logits of reconstruction of input.
         """
-        mu, logvar = self.encoder(2 * x - 1.0)
-        z = self._reparameterise(mu, logvar, test)
+        mu, logvar = self.encoder(x)
+        z = sample_from(mu, logvar, test)
         x_hat_logits = self.decoder(z)
+        
         return mu, logvar, z, x_hat_logits
     
     def training_step(self, x: torch.Tensor) -> torch.Tensor:

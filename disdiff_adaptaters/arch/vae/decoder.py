@@ -1,44 +1,64 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 class Decoder(nn.Module):
     """
     VAE Decoder.
     
     See VAE docstring.
+
+    ConvTranspose2D double H,W with kernel=4, stride=2, padding=1
     """
     
-    def __init__(self, out_channels: int, latent_dim: int):
+    def __init__(self, latent_dim: int, out_shape: tuple[int], out_encoder_shape: tuple[int]):
+        """
+        Load a decoder variational.
+
+        Args:
+            latent_dim: int, size of the input latent vector.
+            out_shape: tuple[int], (C,H,W) shape of the output image
+            out_encoder_shape: tuple[int], (C,H,W) shape of the last convolutional layer of the encoder.
+        """
+
         super().__init__()
-        
+        self.out_shape = out_shape
+        C,H,W = out_encoder_shape
+
         self.net = nn.Sequential(
-            # latent_dim -> 384x8x8
-            nn.Linear(latent_dim, 384*8*8),
-            nn.Unflatten(1, (384, 8, 8)),
-            # 384x8x8 -> 192x16x16
-            nn.ConvTranspose2d(384, 192, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.Linear(latent_dim, C*W*H), 
+            nn.Unflatten(1, (C, W, H)),
+    
+            nn.Conv2d(192, 192, kernel_size=3, stride=1, padding=1), #*1
             nn.ELU(),
-            # 192x16x16 -> 192x16x16
-            nn.Conv2d(192, 192, kernel_size=3, stride=1, padding=1),
+
+            nn.ConvTranspose2d(192, 96, kernel_size=4, stride=2, padding=1), #*2
             nn.ELU(),
-            # 192x16x16 -> 96x32x32
-            nn.ConvTranspose2d(192, 96, kernel_size=3, stride=2, padding=1, output_padding=1),
+
+            nn.Conv2d(96, 96, kernel_size=3, stride=1, padding=1), #*1
             nn.ELU(),
-            # 96x32x32 -> 96x32x32
-            nn.Conv2d(96, 96, kernel_size=3, stride=1, padding=1),
+
+            nn.ConvTranspose2d(96, 48, kernel_size=4, stride=2, padding=1),#*2
             nn.ELU(),
-            # 96x32x32 -> 48x64x64
-            nn.ConvTranspose2d(96, 48, kernel_size=3, stride=2, padding=1, output_padding=1),
+
+            nn.Conv2d(48, 48, kernel_size=3, stride=1, padding=1), #*1
             nn.ELU(),
-            # 48x64x64 -> 48x64x64
-            nn.Conv2d(48, 48, kernel_size=3, stride=1, padding=1),
+ 
+            nn.ConvTranspose2d(48, out_shape[0], kernel_size=4, stride=2, padding=1), #*2
             nn.ELU(),
-            # 48x64x64 -> out_channelsx128x128
-            nn.ConvTranspose2d(48, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1),
-            nn.ELU(),
-            # out_channelsx128x128 -> out_channelsx128x128
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1),
+
+            nn.Conv2d(out_shape[0], out_shape[0], kernel_size=3, stride=1, padding=1), #*1
         )
+
     
     def forward(self, z: torch.Tensor) -> torch.Tensor:
-        return self.net(z)
+        
+        x = self.net(z)
+        if not (self.out_shape[2] > 0 and (self.out_shape[2] & (self.out_shape[2] - 1))) == 0 : 
+            print(f"{self.out_shape[2]} is not a power of 2. Interpolation from this shape to {self.out_shape}")
+            x = F.interpolate(x, 
+                              size=(self.out_shape[1], self.out_shape[2]), 
+                              mode='bilinear', 
+                              align_corners=False)
+        sigmoid = nn.Sigmoid()
+        return sigmoid(x)

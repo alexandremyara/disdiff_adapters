@@ -88,10 +88,17 @@ def collate_images(batch: list):
 
     return channels_list, batched_labels, num_channels_list
 
-def display(batch: list) :
+def display(batch: tuple[torch.Tensor]) :
     """
+    Display a batch of RGB images. 
+    Batch sould be a tuple of two tensors : ([BATCH_SIZE, 3, H, W], [BATCH_SIZE, 1])
     batch_size is always a power of 2.
+
+    Args:
+    batch_size: tuple[torch.Tensor], ([BATCH_SIZE, 3, H, W], [BATCH_SIZE, 1])
+
     """
+
     nb_samples = len(batch[0]) #batch_size
     nb_col = np.log2(nb_samples)
     nb_row = np.log2(nb_samples)
@@ -106,22 +113,34 @@ def display(batch: list) :
         ax.imshow(img.permute(1,2,0).numpy())
         ax.set_title(f"{labels[i].numpy()}")
 
-def pca_latent(feats: tuple[torch.Tensor], labels: torch.Tensor) :
+def sample_from(mu_logvar: tuple[torch.Tensor], test=False):
+    mu, logvar = mu_logvar
+    eps = torch.randn_like(logvar)
+    
+    if test: return mu
+    else : return mu + torch.exp(0.5 * logvar) * eps
+
+def pca_latent(mu_logvars: tuple[torch.Tensor], labels: torch.Tensor, test=False) :
+    """
+    Generate a plot to visualize in 2D the latent space.
+    
+    Args:
+    feats: tuple[torch.Tensor], ((number_sample,embed_dim), (number_sample,embed_dim))
+    labels: torch.Tensor, (number_sample, 1)
+    test: bool, if inference set True.
+    """
+
     pca = PCA(n_components=2)
     latent = []
 
-    unique_labels = np.unique(labels)
+    unique_labels = np.unique(labels.detach().cpu().numpy())
     colors = plt.cm.tab10.colors
 
     label_to_color = {label: colors[i % len(colors)] for i, label in enumerate(unique_labels)}
 
-    for mu, logvar in list(zip(*feats)) :
-        eps = torch.randn_like(logvar)
-        z = mu+torch.exp(0.5*logvar)*eps
-        latent.append(z.detach().cpu().numpy())
+    z = sample_from(mu_logvars, test=test)
 
-    latent = np.asarray(latent)
-    latent_pca = pca.fit_transform(latent)
+    latent_pca = pca.fit_transform(z.detach().cpu().numpy())
 
     for label in unique_labels:
         idx = labels.squeeze(0) == label
@@ -131,3 +150,24 @@ def pca_latent(feats: tuple[torch.Tensor], labels: torch.Tensor) :
         plt.legend()
     plt.grid()
     plt.show()
+
+def set_device() -> str :
+    """
+    Looking for a GPU and display informations if available.
+
+    Return:
+    device: str, name of device (cpu or cuda)
+    """
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"device is at {device}")
+
+    if device == "cuda" :
+        print("Nombre de GPU :", torch.cuda.device_count())
+
+        for i in range(torch.cuda.device_count()):
+            print(f"\n[ GPU {i} ]")
+            print("Nom :", torch.cuda.get_device_name(i))
+            print("Mémoire totale :", round(torch.cuda.get_device_properties(i).total_memory / 1e9, 2), "Go")
+            print("Mémoire utilisée :", round(torch.cuda.memory_allocated(i) / 1e9, 2), "Go")
+            print("Mémoire réservée :", round(torch.cuda.memory_reserved(i) / 1e9, 2), "Go")
+    return device

@@ -2,30 +2,39 @@ import torch
 import torch.nn as nn
 
 class Encoder(nn.Module):
-    def __init__(self, input_channels: int, input_size: int, latent_dim: int):
+    def __init__(self, input_channels: int, img_size: int, latent_dim: int):
+        """
+        Load a variational encoder.
+
+        Args:
+            input_channels: int, channel of the original image
+            img_size: int, for a 28x28px img_size=28
+            latent_dim: int, size of a latent vector
+        """
         super().__init__()
         self.latent_dim = latent_dim
-
+        self.out_encoder_shape = None
+        
         self.features = nn.Sequential(
-            nn.Conv2d(input_channels, 48, kernel_size=3, stride=2, padding=1), nn.ELU(),
-            nn.Conv2d(48, 48, kernel_size=3, stride=1, padding=1), nn.ELU(),
-            nn.Conv2d(48, 96, kernel_size=3, stride=2, padding=1), nn.ELU(),
-            nn.Conv2d(96, 96, kernel_size=3, stride=1, padding=1), nn.ELU(),
-            nn.Conv2d(96, 192, kernel_size=3, stride=2, padding=1), nn.ELU(),
-            nn.Conv2d(192, 192, kernel_size=3, stride=1, padding=1), nn.ELU()
+            nn.Conv2d(input_channels, 48, kernel_size=3, stride=2, padding=1), nn.ELU(), #/2
+            nn.Conv2d(48, 48, kernel_size=3, stride=1, padding=1), nn.ELU(), #/1
+            nn.Conv2d(48, 96, kernel_size=3, stride=2, padding=1), nn.ELU(), #/2
+            nn.Conv2d(96, 96, kernel_size=3, stride=1, padding=1), nn.ELU(), #/1
+            nn.Conv2d(96, 192, kernel_size=3, stride=2, padding=1), nn.ELU(), #/2
+            nn.Conv2d(192, 192, kernel_size=3, stride=1, padding=1), nn.ELU() #/1
         )
 
         # calcul automatique de la taille aplatie après convolutions
         with torch.no_grad():
-            dummy = torch.zeros(1, input_channels, input_size, input_size)
+            dummy = torch.zeros(1, input_channels, img_size, img_size)
             out = self.features(dummy)
-            print(out.shape)
+            self.out_encoder_shape = out.shape[1:]
             self.flattened_size = out.shape[1]*out.shape[2]*out.shape[3]
 
         self.fc = nn.Sequential(nn.Flatten(),nn.Linear(self.flattened_size, latent_dim * 2))
 
     def forward(self, x):
-        x = self.features(x)
+        x = self.features(2*x-1)
         x = self.fc(x)
         mu, logvar = torch.chunk(x, 2, dim=1)
         return mu, logvar
