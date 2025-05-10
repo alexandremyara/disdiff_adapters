@@ -1,20 +1,25 @@
-import os
+from os.path import join
+from os import getenv
 from dataclasses import dataclass
 
-PROJECT_PATH=os.getenv("IBENS_PROJECT_PATH")
+#General Const
+PROJECT_PATH=getenv("IBENS_PROJECT_PATH")
 if PROJECT_PATH is None : PROJECT_PATH ="." 
 
+LOG_DIR = join(PROJECT_PATH, "disdiff_adaptaters/logs/")
+
+#Const by Dataset/Model
 @dataclass
 class Shapes3D :
 
     @dataclass
     class Path :
-        H5 = os.path.join(PROJECT_PATH, "disdiff_adaptaters/data/3dshapes/3dshapes.h5")
-        TRAIN = os.path.join(PROJECT_PATH, "disdiff_adaptaters/data/3dshapes/shapes3d_train.pt")
-        VAL = os.path.join(PROJECT_PATH, "disdiff_adaptaters/data/3dshapes/shapes3d_val.pt")
-        TEST = os.path.join(PROJECT_PATH, "disdiff_adaptaters/data/3dshapes/shapes3d_test.pt")
-        NPZ = os.path.join(PROJECT_PATH, "disdiff_adaptaters/data/3dshapes/split_3dshapes.npz")
-
+        H5 = join(PROJECT_PATH, "disdiff_adaptaters/data/3dshapes/3dshapes.h5")
+        TRAIN = join(PROJECT_PATH, "disdiff_adaptaters/data/3dshapes/shapes3d_train.pt")
+        VAL = join(PROJECT_PATH, "disdiff_adaptaters/data/3dshapes/shapes3d_val.pt")
+        TEST = join(PROJECT_PATH, "disdiff_adaptaters/data/3dshapes/shapes3d_test.pt")
+        NPZ = join(PROJECT_PATH, "disdiff_adaptaters/data/3dshapes/split_3dshapes.npz")
+        VAE = join(LOG_DIR, "shapes_vae/")
     @dataclass
     class Params :
         FACTORS_IN_ORDER = ['floor_hue', 'wall_hue', 'object_hue', 'scale', 'shape',
@@ -28,7 +33,7 @@ class ChAda :
 
     @dataclass
     class Path :
-        WEIGHTS = os.path.join(PROJECT_PATH, "disdiff_adaptaters/arch/chada/weights.ckpt")
+        WEIGHTS = join(PROJECT_PATH, "disdiff_adaptaters/arch/chada/weights.ckpt")
 
     @dataclass
     class Config :
@@ -39,8 +44,9 @@ class BloodMNIST :
     
     @dataclass
     class Path :
-        TRAIN = os.path.join(PROJECT_PATH, "disdiff_adaptaters/data/bloodmnist/bloodmnist_train.pt")
-        VAL = os.path.join(PROJECT_PATH, "disdiff_adaptaters/data/bloodmnist/bloodmnist_val.pt")
-        TEST = os.path.join(PROJECT_PATH, "disdiff_adaptaters/data/bloodmnist/bloodmnist_test.pt")
-        NPZ = os.path.join(PROJECT_PATH, "disdiff_adaptaters/data/bloodmnist/bloodmnist.npz")
-        H5 = os.path.join(PROJECT_PATH,"disdiff_adaptaters/data/bloodmnist/bloodmnist.h5" )
+        TRAIN = join(PROJECT_PATH, "disdiff_adaptaters/data/bloodmnist/bloodmnist_train.pt")
+        VAL = join(PROJECT_PATH, "disdiff_adaptaters/data/bloodmnist/bloodmnist_val.pt")
+        TEST = join(PROJECT_PATH, "disdiff_adaptaters/data/bloodmnist/bloodmnist_test.pt")
+        NPZ = join(PROJECT_PATH, "disdiff_adaptaters/data/bloodmnist/bloodmnist.npz")
+        H5 = join(PROJECT_PATH,"disdiff_adaptaters/data/bloodmnist/bloodmnist.h5" )
+        VAE = join(LOG_DIR, "bloodmnist_vae")

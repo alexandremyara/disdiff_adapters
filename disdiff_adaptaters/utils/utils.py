@@ -17,8 +17,11 @@ def load_h5(h5_path: str) :
     Return:
         list of datasetH5
     """
-    dataset_h5 = h5py.File(h5_path, "r")
-    return [dataset_h5[key] for key in dataset_h5.keys()]
+    try : 
+        dataset_h5 = h5py.File(h5_path, "r")
+        return [dataset_h5[key] for key in dataset_h5.keys()]
+    except FileNotFoundError as e : print("WARNING : file not foud.")
+    
 
 def split(data, label, ratio: int=0.8) :
     """

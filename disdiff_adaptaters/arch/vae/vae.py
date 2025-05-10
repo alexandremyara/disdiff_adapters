@@ -56,7 +56,7 @@ class VAE(L.LightningModule):
         weighted_kl_div = self.hparams.beta * kl_div
         
         if log_components:
-            kl_by_latent = kl(mu, logvar, kl_by_latent=True)
+            kl_by_latent = kl(mu, logvar, by_latent=True)
             
             self.log("loss/recon", recon_loss)
             self.log("loss/kl_div", weighted_kl_div)
@@ -75,7 +75,7 @@ class VAE(L.LightningModule):
         Forward pass through the VAE encoder and decoder.
         
         Args:
-            x (torch.Tensor): One-hot encoded input segmentations.
+            x (torch.Tensor): image
         
         Returns:
             mu (torch.Tensor): Mean of approximate posterior.
@@ -84,7 +84,7 @@ class VAE(L.LightningModule):
             x_hat_logits (torch.Tensor): Logits of reconstruction of input.
         """
         mu, logvar = self.encoder(x)
-        z = sample_from(mu, logvar, test)
+        z = sample_from((mu, logvar), test)
         x_hat_logits = self.decoder(z)
         
         return mu, logvar, z, x_hat_logits
@@ -113,21 +113,4 @@ class VAE(L.LightningModule):
         print(f"Val loss: {loss}")
     
     def test_step(self, batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]):
-        """
-        Testing uses ACDC3DDataModule instead of ACDCDataModule to compute 3D
-        Dice scores.
-        """
-        _, x, condition, ed = batch
-        
-        condition_label = f"condition_{int(condition)}"
-        phase_label = "ed" if ed else "es"
-        
-        # 3D data module ensures 1 batch only, but each data point is 4D of
-        # shape (S, C, W, H) where S is the number of slices.
-        x = x.squeeze(0)
-        
-        self.log_reconstruction_metrics(x, condition_label, phase_label)
-        self.log_generation_metrics(x)
-        
-        self.x_buffer.append(x)
-    
+        pass
