@@ -13,7 +13,7 @@ from disdiff_adaptaters.arch.vae.decoder import Decoder
 from disdiff_adaptaters.loss import kl, mse
 from disdiff_adaptaters.utils import sample_from
 
-class VAE(L.LightningModule):
+class VAEModule(L.LightningModule):
 
 
     def __init__(
@@ -26,12 +26,13 @@ class VAE(L.LightningModule):
         
         self.save_hyperparameters()
         
-        self.encoder = Encoder(input_channels=self.hparams.in_channels,
+        self.encoder = Encoder(in_channels=self.hparams.in_channels,
                                img_size=self.hparams.img_size,
                                latent_dim=self.hparams.latent_dim)
         
-        self.decoder = Decoder(latent_dim=self.hparams.latent_dim,
-                               out_shape=(in_channels, img_size, img_size),
+        self.decoder = Decoder(out_channels=self.hparams.in_channels,
+                               img_size=self.hparams.img_size,
+                               latent_dim=self.hparams.latent_dim,
                                out_encoder_shape=self.encoder.out_encoder_shape)       
 
     def configure_optimizers(self):

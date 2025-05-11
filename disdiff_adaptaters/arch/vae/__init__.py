@@ -1,5 +1,5 @@
 from .encoder import Encoder
 from .decoder import Decoder
-from .vae import VAE
+from .vae import VAEModule
 
-__all__ = ["Encoder", "Decoder", "VAE"]
+__all__ = ["Encoder", "Decoder", "VAEModule"]

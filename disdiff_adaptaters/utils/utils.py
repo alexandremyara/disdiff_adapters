@@ -4,6 +4,7 @@ import torch
 from torch import sort
 import numpy as np
 import matplotlib.pyplot as plt
+import lightning as L
 
 from sklearn.decomposition import PCA
 
@@ -22,7 +23,6 @@ def load_h5(h5_path: str) :
         return [dataset_h5[key] for key in dataset_h5.keys()]
     except FileNotFoundError as e : print("WARNING : file not foud.")
     
-
 def split(data, label, ratio: int=0.8) :
     """
     Shuffle and split (data,label) in a train, val and test set.
@@ -35,9 +35,10 @@ def split(data, label, ratio: int=0.8) :
 
     Return:
         Tensors for each data/label set.
+        train_data, train_labels, test_data, test_labels
 
     """
-    print("start split from h5 file")
+    print("start split")
 
     idx = torch.randperm(len(data))
 
@@ -123,15 +124,21 @@ def sample_from(mu_logvar: tuple[torch.Tensor], test=False):
     if test: return mu
     else : return mu + torch.exp(0.5 * logvar) * eps
 
-def pca_latent(mu_logvars: tuple[torch.Tensor], labels: torch.Tensor, test=False) :
+def pca_latent(labels: torch.Tensor, 
+               mu_logvars: None|tuple[torch.Tensor]=None,
+               z: None|torch.Tensor=None, 
+               test: bool=False) :
     """
     Generate a plot to visualize in 2D the latent space.
+    Ensure that if z=None, mu_logvars is not None.
     
     Args:
-    feats: tuple[torch.Tensor], ((number_sample,embed_dim), (number_sample,embed_dim))
+    feats: tuple[torch.Tensor], ((number_sample,latent_dim), (number_sample,latent_dim))
     labels: torch.Tensor, (number_sample, 1)
+    z: None|torch.Tensor, (number_sample, latent_dim). Allows to give directly the latent vector. 
     test: bool, if inference set True.
     """
+    assert (z is not None and mu_logvars is None) or (z is None and mu_logvars is not None), "Among z and mu_logvars, one should be at None. Both can't be."
 
     pca = PCA(n_components=2)
     latent = []
@@ -140,8 +147,8 @@ def pca_latent(mu_logvars: tuple[torch.Tensor], labels: torch.Tensor, test=False
     colors = plt.cm.tab10.colors
 
     label_to_color = {label: colors[i % len(colors)] for i, label in enumerate(unique_labels)}
-
-    z = sample_from(mu_logvars, test=test)
+    if z is None :
+        z = sample_from(mu_logvars, test=test)
 
     latent_pca = pca.fit_transform(z.detach().cpu().numpy())
 
@@ -174,3 +181,4 @@ def set_device() -> str :
             print("Mémoire utilisée :", round(torch.cuda.memory_allocated(i) / 1e9, 2), "Go")
             print("Mémoire réservée :", round(torch.cuda.memory_reserved(i) / 1e9, 2), "Go")
     return device
+ 

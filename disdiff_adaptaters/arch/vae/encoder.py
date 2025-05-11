@@ -2,12 +2,12 @@ import torch
 import torch.nn as nn
 
 class Encoder(nn.Module):
-    def __init__(self, input_channels: int, img_size: int, latent_dim: int):
+    def __init__(self, in_channels: int, img_size: int, latent_dim: int):
         """
         Load a variational encoder.
 
         Args:
-            input_channels: int, channel of the original image
+            in_channels: int, channel of the original image
             img_size: int, for a 28x28px img_size=28
             latent_dim: int, size of a latent vector
         """
@@ -16,7 +16,7 @@ class Encoder(nn.Module):
         self.out_encoder_shape = None
         
         self.features = nn.Sequential(
-            nn.Conv2d(input_channels, 48, kernel_size=3, stride=2, padding=1), nn.ELU(), #/2
+            nn.Conv2d(in_channels, 48, kernel_size=3, stride=2, padding=1), nn.ELU(), #/2
             nn.Conv2d(48, 48, kernel_size=3, stride=1, padding=1), nn.ELU(), #/1
             nn.Conv2d(48, 96, kernel_size=3, stride=2, padding=1), nn.ELU(), #/2
             nn.Conv2d(96, 96, kernel_size=3, stride=1, padding=1), nn.ELU(), #/1
@@ -26,7 +26,7 @@ class Encoder(nn.Module):
 
         # calcul automatique de la taille aplatie après convolutions
         with torch.no_grad():
-            dummy = torch.zeros(1, input_channels, img_size, img_size)
+            dummy = torch.zeros(1, in_channels, img_size, img_size)
             out = self.features(dummy)
             self.out_encoder_shape = out.shape[1:]
             self.flattened_size = out.shape[1]*out.shape[2]*out.shape[3]

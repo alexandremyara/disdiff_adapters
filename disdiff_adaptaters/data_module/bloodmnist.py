@@ -26,7 +26,7 @@ class BloodMNISTDataModule(LightningDataModule) :
 
     def prepare_data(self, is_h5=False):
 
-        if not (exists(self.train_path) and exists(self.test_path)):
+        if not (exists(self.train_path) and exists(self.val_path) and exists(self.test_path)):
             if is_h5 :
                 print("h5 file loading.")
                 images, labels = load_h5(self.h5_path)
@@ -49,8 +49,11 @@ class BloodMNISTDataModule(LightningDataModule) :
             train_images = (train_images.permute(0,3,1,2)/255).to(torch.float32)    
             test_images = (test_images.permute(0,3,1,2)/255).to(torch.float32)
 
+            train_images, train_labels, val_images, val_labels = split(train_images, train_labels)
+
             print("save tensors\n")
             torch.save((train_images, train_labels), self.train_path)
+            torch.save((val_images, val_labels), self.val_path)
             torch.save((test_images, test_labels), self.test_path)
 
         else : pass
@@ -58,8 +61,10 @@ class BloodMNISTDataModule(LightningDataModule) :
     def setup(self, stage) :
         if stage in ("fit", None) :
             train_images, train_labels = torch.load(self.train_path)
+            val_images, val_labels = torch.load(self.val_path)
 
             self.train_dataset = BloodMNISTDataset(train_images, train_labels)
+            self.val_dataset = BloodMNISTDataset(val_images, val_labels)
         else :
             test_images, test_labels = torch.load(self.test_path)
             self.test_dataset = BloodMNISTDataset(test_images, test_labels)
