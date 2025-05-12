@@ -161,17 +161,20 @@ def pca_latent(labels: torch.Tensor,
     plt.grid()
     plt.show()
 
-def set_device() -> str :
+def set_device(pref_gpu: int=0) -> str :
     """
     Looking for a GPU and display informations if available.
 
+    Args:
+        pref_gpu: int, id of the main gpu.
     Return:
-    device: str, name of device (cpu or cuda)
+        device: str, name of device (cpu or cuda)
     """
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"device is at {device}")
+    is_gpu = torch.cuda.is_available()
 
-    if device == "cuda" :
+    device = f"cuda:{pref_gpu}" if is_gpu else "cpu"
+
+    if is_gpu :
         print("Nombre de GPU :", torch.cuda.device_count())
 
         for i in range(torch.cuda.device_count()):
@@ -180,5 +183,7 @@ def set_device() -> str :
             print("Mémoire totale :", round(torch.cuda.get_device_properties(i).total_memory / 1e9, 2), "Go")
             print("Mémoire utilisée :", round(torch.cuda.memory_allocated(i) / 1e9, 2), "Go")
             print("Mémoire réservée :", round(torch.cuda.memory_reserved(i) / 1e9, 2), "Go")
-    return device
+
+    print(f"current device is {torch.cuda.current_device()}")
+    return device, is_gpu
  

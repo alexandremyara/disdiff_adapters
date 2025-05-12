@@ -16,11 +16,11 @@ class Encoder(nn.Module):
         self.out_encoder_shape = None
         
         self.features = nn.Sequential(
-            nn.Conv2d(in_channels, 48, kernel_size=3, stride=2, padding=1), nn.ELU(), #/2
-            nn.Conv2d(48, 48, kernel_size=3, stride=1, padding=1), nn.ELU(), #/1
-            nn.Conv2d(48, 96, kernel_size=3, stride=2, padding=1), nn.ELU(), #/2
-            nn.Conv2d(96, 96, kernel_size=3, stride=1, padding=1), nn.ELU(), #/1
-            nn.Conv2d(96, 192, kernel_size=3, stride=2, padding=1), nn.ELU(), #/2
+            nn.Conv2d(in_channels, 48, kernel_size=3, stride=2, padding=1), nn.BatchNorm2d(48), nn.ELU(), #/2
+            nn.Conv2d(48, 48, kernel_size=3, stride=1, padding=1), nn.BatchNorm2d(48), nn.ELU(), #/1
+            nn.Conv2d(48, 96, kernel_size=3, stride=2, padding=1), nn.BatchNorm2d(96), nn.ELU(), #/2
+            nn.Conv2d(96, 96, kernel_size=3, stride=1, padding=1), nn.BatchNorm2d(96), nn.ELU(), #/1
+            nn.Conv2d(96, 192, kernel_size=3, stride=2, padding=1), nn.BatchNorm2d(192), nn.ELU(), #/2
             nn.Conv2d(192, 192, kernel_size=3, stride=1, padding=1), nn.ELU() #/1
         )
 
@@ -34,7 +34,7 @@ class Encoder(nn.Module):
         self.fc = nn.Sequential(nn.Flatten(),nn.Linear(self.flattened_size, latent_dim * 2))
 
     def forward(self, x):
-        x = self.features(2*x-1)
+        x = self.features(x)
         x = self.fc(x)
         mu, logvar = torch.chunk(x, 2, dim=1)
         return mu, logvar

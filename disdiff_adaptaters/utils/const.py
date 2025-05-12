@@ -19,7 +19,7 @@ class Shapes3D :
         VAL = join(PROJECT_PATH, "disdiff_adaptaters/data/3dshapes/shapes3d_val.pt")
         TEST = join(PROJECT_PATH, "disdiff_adaptaters/data/3dshapes/shapes3d_test.pt")
         NPZ = join(PROJECT_PATH, "disdiff_adaptaters/data/3dshapes/split_3dshapes.npz")
-        VAE = join(LOG_DIR, "shapes_vae/")
+        VAE = join(LOG_DIR, "vae/shapes/")
     @dataclass
     class Params :
         FACTORS_IN_ORDER = ['floor_hue', 'wall_hue', 'object_hue', 'scale', 'shape',
@@ -49,4 +49,4 @@ class BloodMNIST :
         TEST = join(PROJECT_PATH, "disdiff_adaptaters/data/bloodmnist/bloodmnist_test.pt")
         NPZ = join(PROJECT_PATH, "disdiff_adaptaters/data/bloodmnist/bloodmnist.npz")
         H5 = join(PROJECT_PATH,"disdiff_adaptaters/data/bloodmnist/bloodmnist.h5" )
-        VAE = join(LOG_DIR, "bloodmnist_vae")
+        VAE = join(LOG_DIR, "vae/bloodmnist")

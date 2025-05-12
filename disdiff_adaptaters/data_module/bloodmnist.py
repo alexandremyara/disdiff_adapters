@@ -19,6 +19,7 @@ class BloodMNISTDataModule(LightningDataModule) :
                  ratio: int=0.8,
                  batch_size: int=8) :
         
+        super().__init__()
         self.h5_path = h5_path
         self.train_path, self.val_path, self.test_path = train_path, val_path, test_path
         self.ratio = ratio
@@ -70,7 +71,7 @@ class BloodMNISTDataModule(LightningDataModule) :
             self.test_dataset = BloodMNISTDataset(test_images, test_labels)
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, drop_last=True)
 
     def val_dataloader(self):
         return DataLoader(self.val_dataset, batch_size=self.batch_size)

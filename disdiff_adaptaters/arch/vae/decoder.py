@@ -33,18 +33,23 @@ class Decoder(nn.Module):
             nn.Unflatten(1, (C, W, H)),
     
             nn.Conv2d(192, 192, kernel_size=3, stride=1, padding=1), #*1
+            nn.BatchNorm2d(192),
             nn.ELU(),
 
             nn.ConvTranspose2d(192, 96, kernel_size=4, stride=2, padding=1), #*2
+            nn.BatchNorm2d(96),
             nn.ELU(),
 
             nn.Conv2d(96, 96, kernel_size=3, stride=1, padding=1), #*1
+            nn.BatchNorm2d(96),
             nn.ELU(),
 
             nn.ConvTranspose2d(96, 48, kernel_size=4, stride=2, padding=1),#*2
+            nn.BatchNorm2d(48),
             nn.ELU(),
 
             nn.Conv2d(48, 48, kernel_size=3, stride=1, padding=1), #*1
+            nn.BatchNorm2d(48),
             nn.ELU(),
  
             nn.ConvTranspose2d(48, self.out_channels, kernel_size=4, stride=2, padding=1), #*2
@@ -58,7 +63,7 @@ class Decoder(nn.Module):
         
         x = self.net(z)
         if not (self.img_size > 0 and (self.img_size & (self.img_size - 1))) == 0 : 
-            print(f"{self.img_size} is not a power of 2. Interpolation from this shape to {(self.out_encoder_shape, self.out_encoder_shape)}")
+
             x = F.interpolate(x, 
                               size=(self.img_size, self.img_size), 
                               mode='bilinear', 

@@ -51,7 +51,7 @@ class _MultiDistillMe(torch.nn.Module) :
 
         return mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z
     
-class MultiDistillMeDataModule(LightningModule) :
+class MultiDistillModule(LightningModule) :
 
     def __init__(self,
                  in_channels: int,
@@ -84,8 +84,8 @@ class MultiDistillMeDataModule(LightningModule) :
     
     def loss(self, mus_logvars_s, mus_logvars_t, image_hat_logits, images, log_components=False) :
 
-        weighted_kl_s = self.hparams.beta_s*kl(mus_logvars_s)
-        weighted_kl_t = self.hparams.beta_t*kl(mus_logvars_t)
+        weighted_kl_s = self.hparams.beta_s*kl(*mus_logvars_s)
+        weighted_kl_t = self.hparams.beta_t*kl(*mus_logvars_t)
         reco = mse(image_hat_logits, images)
 
         if log_components :
@@ -120,8 +120,8 @@ class MultiDistillMeDataModule(LightningModule) :
         images, labels = batch
         mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z = self.forward(images)
 
-        weighted_kl_s = self.hparams.beta_s*kl(mus_logvars_s)
-        weighted_kl_t = self.hparams.beta_t*kl(mus_logvars_t)
+        weighted_kl_s = self.hparams.beta_s*kl(*mus_logvars_s)
+        weighted_kl_t = self.hparams.beta_t*kl(*mus_logvars_t)
         reco = mse(image_hat_logits, images)
 
         self.log("loss/reco_test", reco)
