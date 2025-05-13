@@ -55,11 +55,18 @@ def parse_args() -> argparse.Namespace:
         default="bloodmnist"
     )
 
+    parser.add_argument(
+        "--is_vae",
+        type=str,
+        help="is a vae",
+        default=True
+    )
+
     return parser.parse_args()
 
 def main(flags: argparse.Namespace) :
     device = set_device()
-
+    is_vae = True if flags.is_vae == "True" else False
     # Seed
     L.seed_everything(SEED)
     
@@ -69,22 +76,30 @@ def main(flags: argparse.Namespace) :
             data_module = BloodMNISTDataModule(batch_size=16)
             in_channels = 3
             img_size = 28
-            name_dir = BloodMNIST.Path.VAE
 
         case "shapes":
             data_module = Shapes3DDataModule()
             in_channels = 3
             img_size = 64
-            name_dir = Shapes3D.Path.VAE
         case _ :
             raise ValueError("Error flags.dataset")
 
     L.seed_everything(SEED)
-    vae = VAEModule(in_channels = in_channels,
+
+    if is_vae :
+        print("\nVAE module\n") 
+        model = VAEModule(in_channels = in_channels,
                     img_size=img_size,
                     latent_dim=flags.latent_dim)
+        model_name = "vae"
+    else :
+        print("\nAE module\n") 
+        model = AEModule(in_channels = in_channels,
+                    img_size=img_size,
+                    latent_dim=flags.latent_dim)
+        model_name = "ae"
     
-    version=f"vae_epoch={flags.max_epochs}_beta={flags.beta}_latent={flags.latent_dim}"
+    version=f"{model_name}_epoch={flags.max_epochs}_beta={flags.beta}_latent={flags.latent_dim}"
     print(f"\nVERSION : {version}\n")
 
     trainer = Trainer(
@@ -94,8 +109,8 @@ def main(flags: argparse.Namespace) :
             max_epochs=flags.max_epochs,
 
             logger=TensorBoardLogger(
-                save_dir=LOG_DIR+"/vae",
-                name=name_dir,
+                save_dir=LOG_DIR+f"/{model_name}",
+                name=flags.dataset,
                 version=version,
                 default_hp_metric=False,
             ),
@@ -105,7 +120,7 @@ def main(flags: argparse.Namespace) :
             ]
         )
     
-    trainer.fit(vae, data_module)
+    trainer.fit(model, data_module)
 
 
 if __name__ == "__main__":

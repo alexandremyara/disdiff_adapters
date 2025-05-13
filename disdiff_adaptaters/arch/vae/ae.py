@@ -6,7 +6,7 @@ from disdiff_adaptaters.arch.vae import *
 from disdiff_adaptaters.utils import sample_from, pca_latent, display
 from disdiff_adaptaters.loss import *
 
-class _VAE(torch.nn.Module) :
+class _AE(torch.nn.Module) :
     def __init__(self,
                  in_channels: int,
                  img_size: int,
@@ -16,21 +16,22 @@ class _VAE(torch.nn.Module) :
 
         self.encoder = Encoder(in_channels=in_channels,
                                img_size=img_size,
-                               latent_dim=latent_dim,)
+                               latent_dim=latent_dim,
+                               is_vae=False)
         
         self.decoder = Decoder(out_channels=in_channels,
                                img_size=img_size,
                                latent_dim=latent_dim,
-                               out_encoder_shape=self.encoder.out_encoder_shape)
+                               out_encoder_shape=self.encoder.out_encoder_shape,
+                               is_vae=False)
         
-    def forward(self, images: torch.Tensor, test: bool=False) :
-        mus_logvars = self.encoder(images)
-        z = sample_from(mus_logvars, test)
+    def forward(self, images: torch.Tensor) -> torch.Tensor :
+        z = self.encoder(images)
         image_hat_logits = self.decoder(z)
 
-        return image_hat_logits, mus_logvars
+        return image_hat_logits
 
-class VAEModule(LightningModule) :
+class AEModule(LightningModule) :
 
     def __init__(self,
                  in_channels: int,
@@ -41,7 +42,7 @@ class VAEModule(LightningModule) :
         super().__init__()
         self.save_hyperparameters()
 
-        self.model = _VAE(in_channels=self.hparams.in_channels,
+        self.model = _AE(in_channels=self.hparams.in_channels,
                           img_size=self.hparams.img_size,
                           latent_dim=self.hparams.latent_dim)
         self.images_buff = None
@@ -50,15 +51,9 @@ class VAEModule(LightningModule) :
     def configure_optimizers(self):
         return torch.optim.AdamW(self.model.parameters(), lr=6e-5, weight_decay=1e-2)
     
-    def generate(self, nb_samples: int=8) -> torch.Tensor :
-        eps = torch.randn_like(torch.zeros([nb_samples, self.hparams.latent_dim])).to(self.device, torch.float32)
-
-        x_hat_logits = self.model.decoder(eps)
-        return x_hat_logits
-    
     def show_reconstruct(self, images: torch.Tensor) :
         images = images.to(self.device)
-        images_gen, _ = self(images, test=True)
+        images_gen = self(images)
 
         fig, axes = plt.subplots(len(images), 2, figsize=(7, 20))
 
@@ -73,27 +68,24 @@ class VAEModule(LightningModule) :
             axes[i,1].set_title("reco")
         plt.show()
     
-    def forward(self, images: torch.Tensor, test: bool=False) -> tuple[torch.Tensor]:
-        image_hat_logits, mus_logvars= self.model(images, test)
+    def forward(self, images: torch.Tensor) -> torch.Tensor:
+        image_hat_logits= self.model(images)
 
-        return image_hat_logits, mus_logvars
+        return image_hat_logits
     
-    def loss(self, image_hat_logits, mus_logvars, images, log_components=False) -> float :
-        mus, logvars = mus_logvars
-        weighted_kl = self.hparams.beta * kl(mus, logvars)
-
+    def loss(self, image_hat_logits, images, log_components=False) -> float :
         reco = mse(image_hat_logits, images)
 
         if log_components :
-            self.log("loss/kl_s", weighted_kl)
+
             self.log("loss/reco", reco)
 
-        return weighted_kl+reco
+        return reco
     
     def training_step(self, batch: tuple[torch.Tensor]) -> float:
         images, labels = batch
-        image_hat_logits,mus_logvars = self.forward(images)
-        loss = self.loss(image_hat_logits, mus_logvars, images, log_components=True)
+        image_hat_logits= self.forward(images)
+        loss = self.loss(image_hat_logits, images, log_components=True)
 
         print(f"Train loss: {loss}")
         
@@ -105,33 +97,25 @@ class VAEModule(LightningModule) :
 
     def validation_step(self, batch: tuple[torch.Tensor]):
         images, labels = batch
-        image_hat_logits, mus_logvars = self.forward(images)
-        loss = self.loss(image_hat_logits, mus_logvars, images)
+        image_hat_logits  = self.forward(images)
+        loss = self.loss(image_hat_logits, images)
 
         self.log("loss/val", loss)
         print(f"Val loss: {loss}")
     
     def test_step(self, batch: tuple[torch.Tensor]) :
         images, labels = batch
-        image_hat_logits, mus_logvars = self.forward(images)
+        image_hat_logits = self.forward(images)
 
-        weighted_kl= -self.hparams.beta*kl(*mus_logvars)
+
         reco = mse(image_hat_logits, images)
 
-        self.log("loss/reco_test", reco)
-        self.log("loss/kl_test", weighted_kl)
-        self.log("loss/test", reco+weighted_kl)
+        self.log("loss/test", reco)
 
         if self.images_buff is None : self.images_buff = images
 
 
     def on_test_end(self):
-        images_gen = self.generate()
-        labels_gen = torch.zeros([images_gen.shape[0],1])
-
-        display((images_gen.detach().to("cpu"), labels_gen.detach().to("cpu")))
-
-        self.logger.experiment.add_figure("img/gen", plt.gcf())
 
         self.show_reconstruct(self.images_buff)
         self.logger.experiment.add_figure("img/reco", plt.gcf())        

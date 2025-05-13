@@ -57,11 +57,18 @@ def parse_args() -> argparse.Namespace:
         default="bloodmnist"
     )
 
+    parser.add_argument(
+        "--is_vae",
+        type=str,
+        help="is a vae",
+        default="True"
+    )
+
     return parser.parse_args()
 
 def main(flags: argparse.Namespace) :
     device = set_device()
-
+    is_vae = True if flags.is_vae else False
     # Seed
     L.seed_everything(SEED)
     
@@ -71,21 +78,28 @@ def main(flags: argparse.Namespace) :
             data_module = BloodMNISTDataModule(batch_size=16)
             in_channels = 3
             img_size = 28
-            name_dir = BloodMNIST.Path.VAE
 
         case "shapes":
             data_module = Shapes3DDataModule()
             in_channels = 3
             img_size = 64
-            name_dir = Shapes3D.Path.VAE
         case _ :
             raise ValueError("Error flags.dataset")
 
     L.seed_everything(SEED)
+    callbacks = [ModelCheckpoint(monitor="loss/val", mode="min"),LearningRateMonitor("epoch")]
+
+    if is_vae :
+        model_class = VAEModule
+        model_name = "vae"
+        callbacks.append(FIDCallback())
+    else :
+        model_class = AEModule
+        model_name = "ae"
 
     version=f"vae_epoch={flags.max_epochs}_beta={flags.beta}_latent={flags.latent_dim}"
-    ckpt_path = glob.glob(f"{name_dir}/{version}/checkpoints/*.ckpt")[0]
-    vae = VAEModule.load_from_checkpoint(ckpt_path)
+    ckpt_path = glob.glob(f"{LOG_DIR}/{model_name}/{flags.dataset}/{version}/checkpoints/*.ckpt")[0]
+    model = model_class.load_from_checkpoint(ckpt_path)
     
 
     print(f"\nVERSION : {version}\n")
@@ -98,18 +112,14 @@ def main(flags: argparse.Namespace) :
 
             logger=TensorBoardLogger(
                 save_dir=LOG_DIR,
-                name=name_dir,
+                name=flags.dataset,
                 version=version,
                 default_hp_metric=False,
             ),
-            callbacks=[
-                ModelCheckpoint(monitor="loss/val", mode="min"),
-                LearningRateMonitor("epoch"),
-                FIDCallback()
-            ]
+            callbacks=callbacks
         )
     
-    trainer.test(vae, data_module)
+    trainer.test(model, data_module)
     
 
 if __name__ == "__main__":

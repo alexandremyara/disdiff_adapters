@@ -11,7 +11,11 @@ class Decoder(nn.Module):
     ConvTranspose2D double H,W with kernel=4, stride=2, padding=1
     """
     
-    def __init__(self, out_channels: int, img_size: int, latent_dim: int, out_encoder_shape: tuple[int]):
+    def __init__(self, out_channels: int, 
+                 img_size: int, 
+                 latent_dim: int, 
+                 out_encoder_shape: tuple[int],
+                 is_vae: bool=True):
         """
         Load a decoder variational.
 
@@ -25,13 +29,15 @@ class Decoder(nn.Module):
         self.img_size = img_size
         self.out_channels = out_channels
         self.out_encoder_shape = out_encoder_shape
+        self.is_vae = is_vae
 
         C,H,W = self.out_encoder_shape
 
-        self.net = nn.Sequential(
+        self.fc = nn.Sequential(
             nn.Linear(latent_dim, C*W*H), 
-            nn.Unflatten(1, (C, W, H)),
+            nn.Unflatten(1, (C, W, H)),)
     
+        self.net = nn.Sequential(
             nn.Conv2d(192, 192, kernel_size=3, stride=1, padding=1), #*1
             nn.BatchNorm2d(192),
             nn.ELU(),
@@ -59,9 +65,10 @@ class Decoder(nn.Module):
         )
 
     
-    def forward(self, z: torch.Tensor) -> torch.Tensor:
-        
-        x = self.net(z)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.is_vae : x = self.fc(x)
+
+        x = self.net(x)
         if not (self.img_size > 0 and (self.img_size & (self.img_size - 1))) == 0 : 
 
             x = F.interpolate(x, 
