@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning import Trainer
+import lightning as L
 
 from disdiff_adaptaters.arch.vae import *
 from disdiff_adaptaters.utils import *

@@ -115,7 +115,7 @@ class VAEModule(LightningModule) :
         images, labels = batch
         image_hat_logits, mus_logvars = self.forward(images)
 
-        weighted_kl= -self.hparams.beta*kl(*mus_logvars)
+        weighted_kl= self.hparams.beta*kl(*mus_logvars)
         reco = mse(image_hat_logits, images)
 
         self.log("loss/reco_test", reco)
