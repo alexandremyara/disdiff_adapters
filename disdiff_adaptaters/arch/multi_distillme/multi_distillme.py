@@ -51,7 +51,7 @@ class _MultiDistillMe(torch.nn.Module) :
 
         return mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z
     
-class MultiDistillModule(LightningModule) :
+class MultiDistillMeModule(LightningModule) :
 
     def __init__(self,
                  in_channels: int,

@@ -105,7 +105,7 @@ def main(flags: argparse.Namespace) :
 
     trainer = Trainer(
             accelerator="auto",
-            devices=[1],
+            devices=[0],
 
             max_epochs=flags.max_epochs,
 

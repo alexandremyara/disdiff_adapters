@@ -2,6 +2,7 @@ import argparse
 import torch
 from lightning import LightningModule
 import matplotlib.pyplot as plt
+import glob
 
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -11,6 +12,7 @@ from disdiff_adaptaters.arch.vae import *
 from disdiff_adaptaters.utils import *
 from disdiff_adaptaters.loss import *
 from disdiff_adaptaters.data_module import *
+from disdiff_adaptaters.metric import *
 
 SEED = 2025
 
@@ -66,7 +68,8 @@ def parse_args() -> argparse.Namespace:
 
 def main(flags: argparse.Namespace) :
     device = set_device()
-    is_vae = True if flags.is_vae == "True" else False
+    is_vae = True if flags.is_vae=="True" else False
+    print("\n\nYOU ARE LOADING A VAE\n\n")
     # Seed
     L.seed_everything(SEED)
     
@@ -85,27 +88,26 @@ def main(flags: argparse.Namespace) :
             raise ValueError("Error flags.dataset")
 
     L.seed_everything(SEED)
+    callbacks = []
 
     if is_vae :
-        print("\nVAE module\n") 
-        model = VAEModule(in_channels = in_channels,
-                    img_size=img_size,
-                    latent_dim=flags.latent_dim,
-                    beta=flags.beta)
+        model_class = VAEModule
         model_name = "vae"
+        callbacks.append(FIDCallback())
     else :
-        print("\nAE module\n") 
-        model = AEModule(in_channels = in_channels,
-                    img_size=img_size,
-                    latent_dim=flags.latent_dim)
+        model_class = AEModule
         model_name = "ae"
+
+    version=f"vae_epoch={flags.max_epochs}_beta={flags.beta}_latent={flags.latent_dim}"
+    ckpt_path = glob.glob(f"{LOG_DIR}/{model_name}/{flags.dataset}/{version}/checkpoints/*.ckpt")[0]
+    model = model_class.load_from_checkpoint(ckpt_path)
     
-    version=f"{model_name}_epoch={flags.max_epochs}_beta={flags.beta}_latent={flags.latent_dim}"
+
     print(f"\nVERSION : {version}\n")
 
     trainer = Trainer(
             accelerator="auto",
-            devices=[1],
+            devices=[0],
 
             max_epochs=flags.max_epochs,
 
@@ -115,14 +117,11 @@ def main(flags: argparse.Namespace) :
                 version=version,
                 default_hp_metric=False,
             ),
-            callbacks=[
-                ModelCheckpoint(monitor="loss/val", mode="min"),
-                LearningRateMonitor("epoch"),
-            ]
+            callbacks=callbacks
         )
     
-    trainer.fit(model, data_module)
-
+    trainer.test(model, data_module)
+    
 
 if __name__ == "__main__":
     flags = parse_args()

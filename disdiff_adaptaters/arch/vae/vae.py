@@ -48,7 +48,7 @@ class VAEModule(LightningModule) :
     
             
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.model.parameters(), lr=6e-5, weight_decay=1e-2)
+        return torch.optim.AdamW(self.model.parameters(), lr=1e-3, weight_decay=1e-2)
     
     def generate(self, nb_samples: int=8) -> torch.Tensor :
         eps = torch.randn_like(torch.zeros([nb_samples, self.hparams.latent_dim])).to(self.device, torch.float32)

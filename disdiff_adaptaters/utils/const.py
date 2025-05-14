@@ -6,7 +6,7 @@ from dataclasses import dataclass
 PROJECT_PATH=getenv("IBENS_PROJECT_PATH")
 if PROJECT_PATH is None : PROJECT_PATH ="." 
 
-LOG_DIR = join(PROJECT_PATH, "disdiff_adaptaters/logs/")
+LOG_DIR = join(PROJECT_PATH, "disdiff_adaptaters/logs")
 
 #Const by Dataset/Model
 @dataclass

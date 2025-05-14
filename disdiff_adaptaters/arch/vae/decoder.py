@@ -74,6 +74,6 @@ class Decoder(nn.Module):
             x = F.interpolate(x, 
                               size=(self.img_size, self.img_size), 
                               mode='bilinear', 
-                              align_corners=False)
+                              align_corners=False) #Padding
         sigmoid = nn.Sigmoid()
         return sigmoid(x)

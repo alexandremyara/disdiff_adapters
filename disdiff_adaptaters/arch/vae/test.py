@@ -68,7 +68,8 @@ def parse_args() -> argparse.Namespace:
 
 def main(flags: argparse.Namespace) :
     device = set_device()
-    is_vae = True if flags.is_vae else False
+    is_vae = True if flags.is_vae=="True" else False
+    print("\n\nYOU ARE LOADING A VAE\n\n")
     # Seed
     L.seed_everything(SEED)
     
@@ -87,7 +88,7 @@ def main(flags: argparse.Namespace) :
             raise ValueError("Error flags.dataset")
 
     L.seed_everything(SEED)
-    callbacks = [ModelCheckpoint(monitor="loss/val", mode="min"),LearningRateMonitor("epoch")]
+    callbacks = []
 
     if is_vae :
         model_class = VAEModule
@@ -106,12 +107,12 @@ def main(flags: argparse.Namespace) :
 
     trainer = Trainer(
             accelerator="auto",
-            devices=[0],
+            devices=[1],
 
             max_epochs=flags.max_epochs,
 
             logger=TensorBoardLogger(
-                save_dir=LOG_DIR,
+                save_dir=LOG_DIR+f"/{model_name}",
                 name=flags.dataset,
                 version=version,
                 default_hp_metric=False,
