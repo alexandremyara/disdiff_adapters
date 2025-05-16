@@ -50,3 +50,10 @@ class BloodMNIST :
         NPZ = join(PROJECT_PATH, "disdiff_adaptaters/data/bloodmnist/bloodmnist.npz")
         H5 = join(PROJECT_PATH,"disdiff_adaptaters/data/bloodmnist/bloodmnist.h5" )
         VAE = join(LOG_DIR, "vae/bloodmnist")
+
+@dataclass
+class CelebA :
+
+    @dataclass
+    class Path :
+        DATA = "/projects/compures/alexandre/disdiff_adaptaters/PyTorch-VAE/Data/"

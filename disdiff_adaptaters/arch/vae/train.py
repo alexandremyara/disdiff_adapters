@@ -63,36 +63,49 @@ def parse_args() -> argparse.Namespace:
         default="True"
     )
 
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        help="batch size",
+        default=10
+    )
+
+    parser.add_argument(
+        "--warm_up",
+        type=str,
+        default="False"
+    )
+
     return parser.parse_args()
 
 def main(flags: argparse.Namespace) :
     device = set_device()
     is_vae = True if flags.is_vae == "True" else False
-    # Seed
-    L.seed_everything(SEED)
+    warm_up = True if flags.warm_up == "True" else False
+
     
     # Load data_module
     match flags.dataset:
         case "bloodmnist":
-            data_module = BloodMNISTDataModule(batch_size=16)
+            data_module = BloodMNISTDataModule(batch_size=flags.batch_size)
             in_channels = 3
             img_size = 28
 
         case "shapes":
-            data_module = Shapes3DDataModule()
+            data_module = Shapes3DDataModule(batch_size=flags.batch_size)
             in_channels = 3
             img_size = 64
         case _ :
             raise ValueError("Error flags.dataset")
 
-    L.seed_everything(SEED)
 
     if is_vae :
         print("\nVAE module\n") 
         model = VAEModule(in_channels = in_channels,
                     img_size=img_size,
                     latent_dim=flags.latent_dim,
-                    beta=flags.beta)
+                    beta=flags.beta,
+                    warm_up=warm_up)
         model_name = "vae"
     else :
         print("\nAE module\n") 
@@ -101,7 +114,7 @@ def main(flags: argparse.Namespace) :
                     latent_dim=flags.latent_dim)
         model_name = "ae"
     
-    version=f"{model_name}_epoch={flags.max_epochs}_beta={flags.beta}_latent={flags.latent_dim}"
+    version=f"{model_name}_epoch={flags.max_epochs}_beta={flags.beta}_latent={flags.latent_dim}_warm_up={warm_up}"
     print(f"\nVERSION : {version}\n")
 
     trainer = Trainer(

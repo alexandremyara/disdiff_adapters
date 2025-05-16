@@ -62,7 +62,19 @@ def parse_args() -> argparse.Namespace:
         "--is_vae",
         type=str,
         help="is a vae",
-        default="True"
+        default="True")
+
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        help="batch size",
+        default=10
+    )
+
+    parser.add_argument(
+        "--warm_up",
+        type=str,
+        default="False"
     )
 
     return parser.parse_args()
@@ -70,25 +82,25 @@ def parse_args() -> argparse.Namespace:
 def main(flags: argparse.Namespace) :
     device = set_device()
     is_vae = True if flags.is_vae=="True" else False
+    warm_up = True if flags.warm_up == "True" else False
+
     print("\n\nYOU ARE LOADING A VAE\n\n")
     # Seed
-    L.seed_everything(SEED)
     
     # Load data_module
     match flags.dataset:
         case "bloodmnist":
-            data_module = BloodMNISTDataModule(batch_size=16)
+            data_module = BloodMNISTDataModule(batch_size=flags.batch_size)
             in_channels = 3
             img_size = 28
 
         case "shapes":
-            data_module = Shapes3DDataModule()
+            data_module = Shapes3DDataModule(batch_size=flags.batch_size)
             in_channels = 3
             img_size = 64
         case _ :
             raise ValueError("Error flags.dataset")
 
-    L.seed_everything(SEED)
     callbacks = []
 
     if is_vae :
@@ -99,7 +111,7 @@ def main(flags: argparse.Namespace) :
         model_class = AEModule
         model_name = "ae"
 
-    version=f"vae_epoch={flags.max_epochs}_beta={flags.beta}_latent={flags.latent_dim}"
+    version=f"vae_epoch={flags.max_epochs}_beta={flags.beta}_latent={flags.latent_dim}_warm_up={warm_up}"
     ckpt_path = glob.glob(f"{LOG_DIR}/{model_name}/{flags.dataset}/{version}/checkpoints/*.ckpt")[0]
     model = model_class.load_from_checkpoint(ckpt_path)
     

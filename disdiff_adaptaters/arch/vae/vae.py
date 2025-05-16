@@ -36,7 +36,8 @@ class VAEModule(LightningModule) :
                  in_channels: int,
                  img_size: int,
                  latent_dim: int,
-                 beta: float=1.0,) :
+                 beta: float=1.0,
+                 warm_up: bool=False) :
         
         super().__init__()
         self.save_hyperparameters()
@@ -48,7 +49,7 @@ class VAEModule(LightningModule) :
     
             
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.model.parameters(), lr=1e-3, weight_decay=1e-2)
+        return torch.optim.AdamW(self.model.parameters(), lr=1e-5, weight_decay=1e-2)
     
     def generate(self, nb_samples: int=8) -> torch.Tensor :
         eps = torch.randn_like(torch.zeros([nb_samples, self.hparams.latent_dim])).to(self.device, torch.float32)
@@ -79,14 +80,31 @@ class VAEModule(LightningModule) :
         return image_hat_logits, mus_logvars
     
     def loss(self, image_hat_logits, mus_logvars, images, log_components=False) -> float :
+        max_beta = self.hparams.beta
         mus, logvars = mus_logvars
-        weighted_kl = self.hparams.beta * kl(mus, logvars)
+
+        # beta warm-up
+        if self.hparams.warm_up :
+            start_epoch = int(self.trainer.max_epochs*1/5)
+            epoch_limit = int(self.trainer.max_epochs*2/5)
+
+            if self.current_epoch < start_epoch:
+                beta = 0.0
+            elif self.current_epoch <= epoch_limit:
+                progress = (self.current_epoch - start_epoch) / (epoch_limit - start_epoch)
+                beta = max_beta * progress
+            else:
+                beta = max_beta
+        else : beta=max_beta
+        
+        weighted_kl = beta * kl(mus, logvars)
 
         reco = mse(image_hat_logits, images)
 
         if log_components :
-            self.log("loss/kl_s", weighted_kl)
+            self.log("loss/kl", weighted_kl)
             self.log("loss/reco", reco)
+            self.log("loss/beta", beta)
 
         return weighted_kl+reco
     
