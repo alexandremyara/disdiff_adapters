@@ -30,9 +30,8 @@ class CelebADataModule(LightningDataModule):
 
     def __init__(
         self,
-        data_path: str,
-        train_batch_size: int = 8,
-        val_batch_size: int = 8,
+        data_path: str=CelebA.Path.DATA,
+        batch_size: int=64,
         patch_size: tuple[int, list[int]] = (256, 256),
         num_workers: int = 0,
         pin_memory: bool = False,
@@ -41,8 +40,8 @@ class CelebADataModule(LightningDataModule):
         super().__init__()
 
         self.data_dir = data_path
-        self.train_batch_size = train_batch_size
-        self.val_batch_size = val_batch_size
+        self.train_batch_size = batch_size
+        self.val_batch_size = batch_size
         self.patch_size = patch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory

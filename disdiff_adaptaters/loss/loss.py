@@ -4,6 +4,7 @@ import torch.nn.functional as F
 
 
 def kl(mu: torch.Tensor, logvar: torch.Tensor, by_latent: bool=False) -> torch.Tensor:
+    
     if by_latent:
         return -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).mean(dim=0)
     else:

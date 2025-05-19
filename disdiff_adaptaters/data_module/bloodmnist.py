@@ -1,7 +1,7 @@
 import lightning as L
 from lightning import LightningDataModule
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader,Dataset
 import numpy as np
 
 from os.path import join, exists
@@ -16,7 +16,7 @@ class BloodMNISTDataModule(LightningDataModule) :
                  train_path: str=BloodMNIST.Path.TRAIN,
                  val_path: str=BloodMNIST.Path.VAL,
                  test_path: str=BloodMNIST.Path.TEST,
-                 ratio: int=0.8,
+                 ratio: float=0.8,
                  batch_size: int=8) :
         
         super().__init__()
@@ -25,7 +25,7 @@ class BloodMNISTDataModule(LightningDataModule) :
         self.ratio = ratio
         self.batch_size = batch_size
 
-    def prepare_data(self, is_h5=False):
+    def prepare_data(self, is_h5: bool=False):
 
         if not (exists(self.train_path) and exists(self.val_path) and exists(self.test_path)):
             if is_h5 :
@@ -47,8 +47,8 @@ class BloodMNISTDataModule(LightningDataModule) :
                 test_labels = data["test_labels.npy"]
                 test_labels = torch.from_numpy(test_labels)
 
-            train_images = (train_images.permute(0,3,1,2)/255).to(torch.float32)    
-            test_images = (test_images.permute(0,3,1,2)/255).to(torch.float32)
+            train_images = (2*(train_images.permute(0,3,1,2)/255) -1).to(torch.float32)    
+            test_images = (2* (test_images.permute(0,3,1,2)/255) -1).to(torch.float32)
 
             train_images, train_labels, val_images, val_labels = split(train_images, train_labels)
 
@@ -59,7 +59,7 @@ class BloodMNISTDataModule(LightningDataModule) :
 
         else : pass
 
-    def setup(self, stage) :
+    def setup(self, stage: str|None=None) :
         if stage in ("fit", None) :
             train_images, train_labels = torch.load(self.train_path)
             val_images, val_labels = torch.load(self.val_path)
@@ -70,11 +70,11 @@ class BloodMNISTDataModule(LightningDataModule) :
             test_images, test_labels = torch.load(self.test_path)
             self.test_dataset = BloodMNISTDataset(test_images, test_labels)
 
-    def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, drop_last=True)
+    def train_dataloader(self) -> DataLoader[tuple[torch.Tensor, torch.Tensor]]:
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, drop_last=True, num_workers=39)
 
-    def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size)
+    def val_dataloader(self) -> DataLoader[tuple[torch.Tensor, torch.Tensor]]:
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=39)
 
-    def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size)
+    def test_dataloader(self) -> DataLoader[tuple[torch.Tensor, torch.Tensor]]:
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=39)

@@ -15,14 +15,14 @@ class Encoder(nn.Module):
         self.latent_dim = latent_dim
         self.out_encoder_shape = None
         self.is_vae=is_vae
+        self.activation = nn.ELU
 
         self.features = nn.Sequential(
-            nn.Conv2d(in_channels, 48, kernel_size=3, stride=2, padding=1), nn.BatchNorm2d(48), nn.ELU(), #/2
-            nn.Conv2d(48, 48, kernel_size=3, stride=1, padding=1), nn.BatchNorm2d(48), nn.ELU(), #/1
-            nn.Conv2d(48, 96, kernel_size=3, stride=2, padding=1), nn.BatchNorm2d(96), nn.ELU(), #/2
-            nn.Conv2d(96, 96, kernel_size=3, stride=1, padding=1), nn.BatchNorm2d(96), nn.ELU(), #/1
-            nn.Conv2d(96, 192, kernel_size=3, stride=2, padding=1), nn.BatchNorm2d(192), nn.ELU(), #/2
-            nn.Conv2d(192, 192, kernel_size=3, stride=1, padding=1), nn.ELU() #/1
+            nn.Conv2d(in_channels, 32, kernel_size=3, stride=2, padding=1), nn.BatchNorm2d(32), self.activation(), #/2
+            nn.Conv2d(32, 32, 3, 1, 1), nn.BatchNorm2d(32), self.activation(),
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1), nn.BatchNorm2d(64), self.activation(), #/2
+            nn.Conv2d(64, 64, 3, 1, 1), nn.BatchNorm2d(64), self.activation(),
+            nn.Conv2d(64, 256, kernel_size=3, stride=2, padding=1), self.activation(), #/2
         )
 
         # calcul automatique de la taille aplatie après convolutions

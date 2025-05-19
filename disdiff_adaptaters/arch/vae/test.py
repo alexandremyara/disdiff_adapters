@@ -112,6 +112,7 @@ def main(flags: argparse.Namespace) :
         model_name = "ae"
 
     version=f"vae_epoch={flags.max_epochs}_beta={flags.beta}_latent={flags.latent_dim}_warm_up={warm_up}"
+ 
     ckpt_path = glob.glob(f"{LOG_DIR}/{model_name}/{flags.dataset}/{version}/checkpoints/*.ckpt")[0]
     model = model_class.load_from_checkpoint(ckpt_path)
     
@@ -120,7 +121,7 @@ def main(flags: argparse.Namespace) :
 
     trainer = Trainer(
             accelerator="auto",
-            devices=[1],
+            devices=[0],
 
             max_epochs=flags.max_epochs,
 

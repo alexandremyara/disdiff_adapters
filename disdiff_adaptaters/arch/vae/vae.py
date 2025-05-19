@@ -1,6 +1,8 @@
 import torch
 from lightning import LightningModule
 import matplotlib.pyplot as plt
+import torchvision.utils as vutils
+import os
 
 from disdiff_adaptaters.arch.vae import *
 from disdiff_adaptaters.utils import sample_from, pca_latent, display
@@ -37,7 +39,8 @@ class VAEModule(LightningModule) :
                  img_size: int,
                  latent_dim: int,
                  beta: float=1.0,
-                 warm_up: bool=False) :
+                 warm_up: bool=False,
+                 kl_weights: int= 10e-4) :
         
         super().__init__()
         self.save_hyperparameters()
@@ -49,7 +52,16 @@ class VAEModule(LightningModule) :
     
             
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.model.parameters(), lr=1e-5, weight_decay=1e-2)
+        optim = torch.optim.AdamW(self.model.parameters(), lr=10e-5, weight_decay=0)
+
+        return {"optimizer": optim, 
+                "lr_scheduler": {
+                                "scheduler": torch.optim.lr_scheduler.ExponentialLR(optimizer=optim,gamma=0.95),
+                                "monitor" :"loss/val",
+                                "interval": "epoch",      
+                                "frequency": 1,
+                                }
+                }
     
     def generate(self, nb_samples: int=8) -> torch.Tensor :
         eps = torch.randn_like(torch.zeros([nb_samples, self.hparams.latent_dim])).to(self.device, torch.float32)
@@ -58,20 +70,24 @@ class VAEModule(LightningModule) :
         return x_hat_logits
     
     def show_reconstruct(self, images: torch.Tensor) :
-        images = images.to(self.device)
+        images = images.to(self.device)[:8]
         images_gen, _ = self(images, test=True)
 
         fig, axes = plt.subplots(len(images), 2, figsize=(7, 20))
 
         for i in range(len(images)) :
-            images_proc = (images[i]*255).to("cpu",torch.uint8).permute(1,2,0).detach().numpy()
-            images_gen_proc = (images_gen[i]*255).to("cpu",torch.uint8).permute(1,2,0).detach().numpy()
+            img = images[i]
+            img_gen = images_gen[i]
+
+            images_proc = (255*((img - img.min()) / (img.max() - img.min() + 1e-8))).to("cpu",torch.uint8).permute(1,2,0).detach().numpy()
+            images_gen_proc = (255*((img_gen - img_gen.min()) / (img_gen.max() - img_gen.min() + 1e-8))).to("cpu",torch.uint8).permute(1,2,0).detach().numpy()
 
             axes[i,0].imshow(images_proc)
             axes[i,1].imshow(images_gen_proc)
 
             axes[i,0].set_title("original")
             axes[i,1].set_title("reco")
+        plt.tight_layout()
         plt.show()
     
     def forward(self, images: torch.Tensor, test: bool=False) -> tuple[torch.Tensor]:
@@ -97,7 +113,7 @@ class VAEModule(LightningModule) :
                 beta = max_beta
         else : beta=max_beta
         
-        weighted_kl = beta * kl(mus, logvars)
+        weighted_kl = beta * self.hparams.kl_weights * kl(mus, logvars)
 
         reco = mse(image_hat_logits, images)
 
@@ -147,12 +163,15 @@ class VAEModule(LightningModule) :
         images_gen = self.generate()
         labels_gen = torch.zeros([images_gen.shape[0],1])
 
-        display((images_gen.detach().to("cpu"), labels_gen.detach().to("cpu")))
+        display((images_gen.detach().cpu(), labels_gen.detach().to("cpu")))
 
         self.logger.experiment.add_figure("img/gen", plt.gcf())
 
         self.show_reconstruct(self.images_buff)
-        self.logger.experiment.add_figure("img/reco", plt.gcf())        
+        self.logger.experiment.add_figure("img/reco", plt.gcf())
+
+        vutils.save_image(images_gen.detach().cpu(), os.path.join(self.logger.log_dir, "gen.png"))
+        vutils.save_image(self.images_buff, os.path.join(self.logger.log_dir, "reco.png"))
 
 
 

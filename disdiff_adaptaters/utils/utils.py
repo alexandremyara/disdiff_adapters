@@ -1,10 +1,10 @@
 import h5py
-from typing import Union
 import torch
 from torch import sort
 import numpy as np
 import matplotlib.pyplot as plt
-import lightning as L
+import math
+
 
 from sklearn.decomposition import PCA
 
@@ -23,7 +23,7 @@ def load_h5(h5_path: str) :
         return [dataset_h5[key] for key in dataset_h5.keys()]
     except FileNotFoundError as e : print("WARNING : file not foud.")
     
-def split(data, label, ratio: int=0.8) :
+def split(data: torch.Tensor, label: torch.Tensor, ratio: float=0.8) :
     """
     Shuffle and split (data,label) in a train, val and test set.
     The ratio is the size of the train set.
@@ -55,7 +55,7 @@ def split(data, label, ratio: int=0.8) :
 
     return torch.tensor(train_data), torch.tensor(train_label), torch.tensor(test_data), torch.tensor(test_label)
 
-def collate_images(batch: list):
+def collate_images(batch: list[torch.Tensor]):
     """
     ##### From a notebook made by Nicolas Bouriez  (HOW_TO_USE.ipynb - ChAdaViT)
 
@@ -104,8 +104,13 @@ def display(batch: tuple[torch.Tensor]) :
     """
 
     nb_samples = len(batch[0]) #batch_size
-    nb_col = np.log2(nb_samples)
-    nb_row = np.log2(nb_samples)
+    # nb_col = np.log2(nb_samples)
+    # nb_row = np.log2(nb_samples)
+
+
+    nb_col = math.ceil(math.sqrt(nb_samples))
+    nb_row = math.ceil(nb_samples / nb_col)
+
     fig, axes = plt.subplots(int(nb_row), int(nb_col), figsize=(10,7))
 
     images, labels = batch
@@ -113,7 +118,10 @@ def display(batch: tuple[torch.Tensor]) :
     for i in range(nb_samples):
         ax = axes[int(i//nb_row),int(i%nb_col)]
 
-        img = (images[i]*255).to(torch.uint8)
+        img = images[i]
+        img = 255*(img - img.min()) / (img.max() - img.min() + 1e-8)
+        img = img.to(torch.uint8)
+        
         ax.imshow(img.permute(1,2,0).numpy())
         ax.set_title(f"{labels[i].numpy()}")
 

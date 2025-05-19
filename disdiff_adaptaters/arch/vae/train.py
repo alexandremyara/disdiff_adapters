@@ -3,6 +3,8 @@ import torch
 from lightning import LightningModule
 import matplotlib.pyplot as plt
 
+from torch.utils.data import DataLoader, TensorDataset
+
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning import Trainer
@@ -42,6 +44,7 @@ def parse_args() -> argparse.Namespace:
         default=1.0,
     )    
 
+    
     parser.add_argument(
         "--latent_dim",
         type=int,
@@ -79,7 +82,8 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 def main(flags: argparse.Namespace) :
-    device = set_device()
+
+    torch.set_float32_matmul_precision('medium')
     is_vae = True if flags.is_vae == "True" else False
     warm_up = True if flags.warm_up == "True" else False
 
@@ -90,11 +94,13 @@ def main(flags: argparse.Namespace) :
             data_module = BloodMNISTDataModule(batch_size=flags.batch_size)
             in_channels = 3
             img_size = 28
+            klw = 10e-4
 
         case "shapes":
             data_module = Shapes3DDataModule(batch_size=flags.batch_size)
             in_channels = 3
             img_size = 64
+            klw = 10e-6
         case _ :
             raise ValueError("Error flags.dataset")
 
@@ -105,7 +111,8 @@ def main(flags: argparse.Namespace) :
                     img_size=img_size,
                     latent_dim=flags.latent_dim,
                     beta=flags.beta,
-                    warm_up=warm_up)
+                    warm_up=warm_up,
+                    kl_weights=klw)
         model_name = "vae"
     else :
         print("\nAE module\n") 
@@ -119,7 +126,7 @@ def main(flags: argparse.Namespace) :
 
     trainer = Trainer(
             accelerator="auto",
-            devices=[1],
+            devices=-1,
 
             max_epochs=flags.max_epochs,
 
@@ -135,6 +142,8 @@ def main(flags: argparse.Namespace) :
             ]
         )
     
+
+
     trainer.fit(model, data_module)
 
 

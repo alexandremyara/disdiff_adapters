@@ -3,13 +3,13 @@
 cd /projects/compures/alexandre/disdiff_adaptaters
 source .venv/bin/activate
 
-batch_size=32
-max_epochs=20
-dataset="bloodmnist"
-betas=("0")
+batch_size=128
+max_epochs=100
+dataset="shapes"
+betas=("0 10e-3 1 5 10")
 latent_dim=4
 warm_up="False"
-
+echo $dataset
 for beta in $betas
 do
     python3 -m disdiff_adaptaters.arch.vae.train \

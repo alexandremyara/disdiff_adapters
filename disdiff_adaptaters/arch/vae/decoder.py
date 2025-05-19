@@ -30,7 +30,7 @@ class Decoder(nn.Module):
         self.out_channels = out_channels
         self.out_encoder_shape = out_encoder_shape
         self.is_vae = is_vae
-
+        self.activation = nn.ELU
         C,H,W = self.out_encoder_shape
 
         self.fc = nn.Sequential(
@@ -38,30 +38,18 @@ class Decoder(nn.Module):
             nn.Unflatten(1, (C, W, H)),)
     
         self.net = nn.Sequential(
-            nn.Conv2d(192, 192, kernel_size=3, stride=1, padding=1), #*1
-            nn.BatchNorm2d(192),
-            nn.ELU(),
 
-            nn.ConvTranspose2d(192, 96, kernel_size=4, stride=2, padding=1), #*2
-            nn.BatchNorm2d(96),
-            nn.ELU(),
+            nn.ConvTranspose2d(256, 64, kernel_size=3, stride=2, padding=1, output_padding=1), nn.BatchNorm2d(64), self.activation(), #*2
 
-            nn.Conv2d(96, 96, kernel_size=3, stride=1, padding=1), #*1
-            nn.BatchNorm2d(96),
-            nn.ELU(),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1, stride=1), nn.BatchNorm2d(64), self.activation(), #*1
 
-            nn.ConvTranspose2d(96, 48, kernel_size=4, stride=2, padding=1),#*2
-            nn.BatchNorm2d(48),
-            nn.ELU(),
+            nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=1, output_padding=1), nn.BatchNorm2d(32), self.activation(), #*2
 
-            nn.Conv2d(48, 48, kernel_size=3, stride=1, padding=1), #*1
-            nn.BatchNorm2d(48),
-            nn.ELU(),
- 
-            nn.ConvTranspose2d(48, self.out_channels, kernel_size=4, stride=2, padding=1), #*2
-            nn.ELU(),
+            nn.Conv2d(32, 32, kernel_size=3, padding=1, stride=1), nn.BatchNorm2d(32), self.activation(), #*1
 
-            nn.Conv2d(self.out_channels, self.out_channels, kernel_size=3, stride=1, padding=1), #*1
+            nn.ConvTranspose2d(32, 32, kernel_size=3, stride=2, padding=1, output_padding=1),  nn.BatchNorm2d(32), self.activation(), #*2
+
+            nn.Conv2d(32, self.out_channels, kernel_size=3, padding=1, stride=1), #*1
         )
 
     
@@ -75,5 +63,5 @@ class Decoder(nn.Module):
                               size=(self.img_size, self.img_size), 
                               mode='bilinear', 
                               align_corners=False) #Padding
-        sigmoid = nn.Sigmoid()
-        return sigmoid(x)
+        activation = nn.Tanh()
+        return activation(x)

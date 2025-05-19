@@ -1,10 +1,10 @@
 from os.path import join
 from os import getenv
 from dataclasses import dataclass
+from typing import ClassVar
 
 #General Const
-PROJECT_PATH=getenv("IBENS_PROJECT_PATH")
-if PROJECT_PATH is None : PROJECT_PATH ="." 
+PROJECT_PATH=getenv("IBENS_PROJECT_PATH") or "."
 
 LOG_DIR = join(PROJECT_PATH, "disdiff_adaptaters/logs")
 
@@ -37,7 +37,7 @@ class ChAda :
 
     @dataclass
     class Config :
-        BASE = {"patch_size": 16, "embed_dim": 192, "return_all_tokens": False, "max_number_channels": 10}
+        BASE: ClassVar[dict[str, int|bool]] = {"patch_size": 16, "embed_dim": 192, "return_all_tokens": False, "max_number_channels": 10}
 
 @dataclass
 class BloodMNIST :
@@ -50,6 +50,12 @@ class BloodMNIST :
         NPZ = join(PROJECT_PATH, "disdiff_adaptaters/data/bloodmnist/bloodmnist.npz")
         H5 = join(PROJECT_PATH,"disdiff_adaptaters/data/bloodmnist/bloodmnist.h5" )
         VAE = join(LOG_DIR, "vae/bloodmnist")
+
+    # @dataclass
+    # class Params :
+    #     N_TRAIN = 
+    #     N_VAL =
+    #     N_TEST = 
 
 @dataclass
 class CelebA :

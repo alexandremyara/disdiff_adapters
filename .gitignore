@@ -8,3 +8,4 @@ disdiff_adaptaters/data/*
 .env
 disdiff_adaptaters/logs/*
 **/out/*
+**/PyTorch-VAE/*
