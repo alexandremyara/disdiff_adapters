@@ -1,4 +1,4 @@
-disdiff_adaptaters/data/*
+disdiff_adapters/data/*
 *.ckpt
 **/__pycache__/*
 *.pyc
@@ -6,6 +6,6 @@ disdiff_adaptaters/data/*
 .venv/*
 .python-version*
 .env
-disdiff_adaptaters/logs/*
+disdiff_adapters/logs/*
 **/out/*
 **/PyTorch-VAE/*

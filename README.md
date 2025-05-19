@@ -1,4 +1,4 @@
-# disdiff_adaptaters
+# disdiff_adapters
 IBENS internship 2025
 
 ## Project description
