@@ -32,8 +32,8 @@ class CelebADataModule(LightningDataModule):
         self,
         data_path: str=CelebA.Path.DATA,
         batch_size: int=64,
-        patch_size: tuple[int, list[int]] = (256, 256),
-        num_workers: int = 0,
+        patch_size: tuple[int, list[int]] = (64, 64),
+        num_workers: int = 4,
         pin_memory: bool = False,
         **kwargs,
     ):

@@ -23,7 +23,7 @@ class _MultiDistillMe(torch.nn.Module) :
                                  img_size=img_size,
                                  latent_dim=latent_dim)
         
-        self.merge_operation = torch.add
+        self.merge_operation = torch.cat
         
         self.decoder = Decoder(out_channels=in_channels,
                                img_size=img_size,
@@ -44,7 +44,7 @@ class _MultiDistillMe(torch.nn.Module) :
         z_t = sample_from(mus_logvars_t)
 
         #merge latent vector from s and t
-        z = self.merge_operation(z_s, z_t)
+        z = self.merge_operation([z_s, z_t])
 
         #decoder
         image_hat_logits = self.decoder(z)

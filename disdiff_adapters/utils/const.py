@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 #General Const
-PROJECT_PATH=getenv("IBENS_PROJECT_PATH") or "."
+PROJECT_PATH= "."
 
 LOG_DIR = join(PROJECT_PATH, "disdiff_adapters/logs")
 

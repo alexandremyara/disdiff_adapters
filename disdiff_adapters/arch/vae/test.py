@@ -17,6 +17,8 @@ from disdiff_adapters.metric import *
 
 SEED = 2025
 
+def to_list(x: str) -> list[str] :
+    return [int(gpu_id) for gpu_id in x.split(",")]
 
 def parse_args() -> argparse.Namespace:
     """
@@ -77,6 +79,26 @@ def parse_args() -> argparse.Namespace:
         default="False"
     )
 
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=10e-5,
+        help="learning rate."
+    )
+
+    parser.add_argument(
+        "--arch",
+        type=str,
+        default="def",
+        help="Name of the architecture"
+    )
+
+    parser.add_argument(
+        "--gpus",
+        type=to_list,
+        default=["0"],
+        help="comma seperated list of gpus"
+    )
     return parser.parse_args()
 
 def main(flags: argparse.Namespace) :
@@ -98,6 +120,13 @@ def main(flags: argparse.Namespace) :
             data_module = Shapes3DDataModule(batch_size=flags.batch_size)
             in_channels = 3
             img_size = 64
+
+        case "celeba":
+            data_module = CelebADataModule(batch_size=flags.batch_size)
+            in_channels = 3
+            img_size = 64
+            klw = 10e-4
+            
         case _ :
             raise ValueError("Error flags.dataset")
 
@@ -111,7 +140,7 @@ def main(flags: argparse.Namespace) :
         model_class = AEModule
         model_name = "ae"
 
-    version=f"vae_epoch={flags.max_epochs}_beta={flags.beta}_latent={flags.latent_dim}_warm_up={warm_up}"
+    version=f"{model_name}_epoch={flags.max_epochs}_beta={flags.beta}_latent={flags.latent_dim}_warm_up={warm_up}_lr={flags.lr}_arch={flags.arch}"
  
     ckpt_path = glob.glob(f"{LOG_DIR}/{model_name}/{flags.dataset}/{version}/checkpoints/*.ckpt")[0]
     model = model_class.load_from_checkpoint(ckpt_path)
@@ -121,9 +150,10 @@ def main(flags: argparse.Namespace) :
 
     trainer = Trainer(
             accelerator="auto",
-            devices=[0],
+            devices=flags.gpus,
 
             max_epochs=flags.max_epochs,
+            log_every_n_steps=20,
 
             logger=TensorBoardLogger(
                 save_dir=LOG_DIR+f"/{model_name}",

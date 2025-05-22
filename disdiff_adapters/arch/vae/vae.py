@@ -40,7 +40,8 @@ class VAEModule(LightningModule) :
                  latent_dim: int,
                  beta: float=1.0,
                  warm_up: bool=False,
-                 kl_weights: int= 10e-4) :
+                 kl_weights: float= 10e-4,
+                 lr: float=10**(-5)) :
         
         super().__init__()
         self.save_hyperparameters()
@@ -48,11 +49,12 @@ class VAEModule(LightningModule) :
         self.model = _VAE(in_channels=self.hparams.in_channels,
                           img_size=self.hparams.img_size,
                           latent_dim=self.hparams.latent_dim)
-        self.images_buff = None
+        self.images_test_buff = None
+        self.images_train_buff = None
     
             
     def configure_optimizers(self):
-        optim = torch.optim.AdamW(self.model.parameters(), lr=10e-5, weight_decay=0)
+        optim = torch.optim.AdamW(self.model.parameters(), lr=self.hparams.lr, weight_decay=0)
 
         return {"optimizer": optim, 
                 "lr_scheduler": {
@@ -89,6 +91,7 @@ class VAEModule(LightningModule) :
             axes[i,1].set_title("reco")
         plt.tight_layout()
         plt.show()
+
     
     def forward(self, images: torch.Tensor, test: bool=False) -> tuple[torch.Tensor]:
         image_hat_logits, mus_logvars= self.model(images, test)
@@ -135,6 +138,7 @@ class VAEModule(LightningModule) :
             raise ValueError("NaN loss")
 
         self.log("loss/train", loss)
+        if self.images_train_buff is None : self.images_train_buff = images
         return loss
 
     def validation_step(self, batch: tuple[torch.Tensor]):
@@ -142,7 +146,7 @@ class VAEModule(LightningModule) :
         image_hat_logits, mus_logvars = self.forward(images)
         loss = self.loss(image_hat_logits, mus_logvars, images)
 
-        self.log("loss/val", loss)
+        self.log("loss/val", loss, sync_dist=True)
         print(f"Val loss: {loss}")
     
     def test_step(self, batch: tuple[torch.Tensor]) :
@@ -152,12 +156,29 @@ class VAEModule(LightningModule) :
         weighted_kl= self.hparams.beta*kl(*mus_logvars)
         reco = mse(image_hat_logits, images)
 
-        self.log("loss/reco_test", reco)
-        self.log("loss/kl_test", weighted_kl)
-        self.log("loss/test", reco+weighted_kl)
+        self.log("loss/reco_test", reco, sync_dist=True)
+        self.log("loss/kl_test", weighted_kl, sync_dist=True)
+        self.log("loss/test", reco+weighted_kl, sync_dist=True)
 
-        if self.images_buff is None : self.images_buff = images
+        if self.images_test_buff is None : self.images_test_buff = images
 
+    def on_train_epoch_end(self):
+        epoch = self.current_epoch
+
+        if epoch % 10 == 0:
+            self.show_reconstruct(self.images_train_buff)
+
+            try : os.mkdir(os.path.join(self.logger.log_dir, f"epoch_{epoch}"))
+            except FileExistsError as e : pass
+
+            save_reco_path = os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"reco_{epoch}.png")
+            plt.gcf().savefig(save_reco_path)
+
+            images_gen = self.generate()
+            save_gen_path = os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"gen_{epoch}.png")
+            vutils.save_image(images_gen.detach().cpu(), save_gen_path)
+
+        
 
     def on_test_end(self):
         images_gen = self.generate()
@@ -167,11 +188,11 @@ class VAEModule(LightningModule) :
 
         self.logger.experiment.add_figure("img/gen", plt.gcf())
 
-        self.show_reconstruct(self.images_buff)
+        self.show_reconstruct(self.images_test_buff)
         self.logger.experiment.add_figure("img/reco", plt.gcf())
 
         vutils.save_image(images_gen.detach().cpu(), os.path.join(self.logger.log_dir, "gen.png"))
-        vutils.save_image(self.images_buff, os.path.join(self.logger.log_dir, "reco.png"))
+
 
 
 
