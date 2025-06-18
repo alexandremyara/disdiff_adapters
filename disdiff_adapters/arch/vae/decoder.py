@@ -1,3 +1,5 @@
+## Deprecated file
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -63,5 +65,5 @@ class Decoder(nn.Module):
                               size=(self.img_size, self.img_size), 
                               mode='bilinear', 
                               align_corners=False) #Padding
-        activation = nn.Tanh()
+        activation = nn.Sigmoid()
         return activation(x)

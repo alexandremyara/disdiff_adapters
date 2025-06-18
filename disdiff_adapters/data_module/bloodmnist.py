@@ -47,8 +47,8 @@ class BloodMNISTDataModule(LightningDataModule) :
                 test_labels = data["test_labels.npy"]
                 test_labels = torch.from_numpy(test_labels)
 
-            train_images = (2*(train_images.permute(0,3,1,2)/255) -1).to(torch.float32)    
-            test_images = (2* (test_images.permute(0,3,1,2)/255) -1).to(torch.float32)
+            train_images = ((train_images.permute(0,3,1,2)/255)).to(torch.float32)    
+            test_images = (2* (test_images.permute(0,3,1,2)/255)).to(torch.float32)
 
             train_images, train_labels, val_images, val_labels = split(train_images, train_labels)
 
@@ -71,7 +71,7 @@ class BloodMNISTDataModule(LightningDataModule) :
             self.test_dataset = BloodMNISTDataset(test_images, test_labels)
 
     def train_dataloader(self) -> DataLoader[tuple[torch.Tensor, torch.Tensor]]:
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, drop_last=True, num_workers=39)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=39)
 
     def val_dataloader(self) -> DataLoader[tuple[torch.Tensor, torch.Tensor]]:
         return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=39)

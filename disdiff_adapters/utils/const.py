@@ -62,4 +62,4 @@ class CelebA :
 
     @dataclass
     class Path :
-        DATA = "/projects/compures/alexandre/disdiff_adapters/PyTorch-VAE/Data/"
+        DATA = "/projects/compures/alexandre/PyTorch-VAE/Data/"

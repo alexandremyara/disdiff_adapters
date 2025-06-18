@@ -15,7 +15,6 @@ from disdiff_adapters.loss import *
 from disdiff_adapters.data_module import *
 from disdiff_adapters.metric import *
 
-SEED = 2025
 
 def to_list(x: str) -> list[str] :
     return [int(gpu_id) for gpu_id in x.split(",")]
@@ -40,14 +39,29 @@ def parse_args() -> argparse.Namespace:
     )
     
     parser.add_argument(
-        "--beta",
+        "--beta_s",
+        type=float,
+        help="beta used",
+        default=1.0,
+    )    
+    
+    parser.add_argument(
+        "--beta_t",
         type=float,
         help="beta used",
         default=1.0,
     )    
 
+    
     parser.add_argument(
-        "--latent_dim",
+        "--latent_dim_s",
+        type=int,
+        help="dimension of the latent space",
+        default=4
+    )
+    
+    parser.add_argument(
+        "--latent_dim_t",
         type=int,
         help="dimension of the latent space",
         default=4
@@ -59,12 +73,6 @@ def parse_args() -> argparse.Namespace:
         help="dataset name used.",
         default="bloodmnist"
     )
-
-    parser.add_argument(
-        "--is_vae",
-        type=str,
-        help="is a vae",
-        default="True")
 
     parser.add_argument(
         "--batch_size",
@@ -100,6 +108,9 @@ def parse_args() -> argparse.Namespace:
         help="comma seperated list of gpus"
     )
     return parser.parse_args()
+
+
+
 
 def main(flags: argparse.Namespace) :
     device = set_device()
@@ -140,7 +151,7 @@ def main(flags: argparse.Namespace) :
         model_class = AEModule
         model_name = "ae"
 
-    version=f"{model_name}_epoch={flags.max_epochs}_beta={flags.beta}_latent={flags.latent_dim}_warm_up={warm_up}_lr={flags.lr}_arch={flags.arch}"
+    version=f"{model_name}_epoch={flags.max_epochs}_beta={(flags.beta_t, flags.beta_t)}_latent={(flags.latent_dim_t, flags.latent_dim_s)}_batch={flags.batch_size}_warm_up={warm_up}_lr={flags.lr}_arch={flags.arch}"
  
     ckpt_path = glob.glob(f"{LOG_DIR}/{model_name}/{flags.dataset}/{version}/checkpoints/*.ckpt")[0]
     model = model_class.load_from_checkpoint(ckpt_path)

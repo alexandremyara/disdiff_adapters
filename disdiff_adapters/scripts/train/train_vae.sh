@@ -3,16 +3,16 @@
 cd /projects/compures/alexandre/disdiff_adapters
 source /projects/compures/alexandre/.venv/bin/activate
 
-batch_size=128
-max_epochs=50
+batch_size=32
+max_epochs=150
 dataset="celeba"
-betas=("0 1 5 15")
-latent_dim=4
-warm_up="False"
+betas=("1 5 15")
+latent_dim=128
+warm_up="True"
 lr=0.00001
-arch="def"
+arch="res"
 
-gpus="3"
+gpus="2"
 
 
 echo $dataset
@@ -26,8 +26,9 @@ do
                                 --batch_size $batch_size \
                                 --warm_up $warm_up \
                                 --lr $lr \
+                                --arch $arch \
                                 --gpus $gpus \
-                                2>&1 | tee "disdiff_adapters/scripts/out/${dataset}_vae_train_epoch=${max_epochs}_beta=${beta}_latent=${latent_dim}_batch=${batch_size}_lr=${lr}_arch=${def}.out"
+                                2>&1 | tee "disdiff_adapters/scripts/out/${dataset}_vae_train_epoch=${max_epochs}_beta=${beta}_latent=${latent_dim}_batch=${batch_size}_lr=${lr}_arch=${arch}.out"
 
     python3 -m disdiff_adapters.arch.vae.test \
                                 --max_epochs $max_epochs \
@@ -37,6 +38,7 @@ do
                                 --batch_size $batch_size \
                                 --warm_up $warm_up \
                                 --lr $lr \
+                                --arch $arch \
                                 --gpus $gpus \
-                                2>&1 | tee -a "disdiff_adapters/scripts/out/${dataset}_vae_train_epoch=${max_epochs}_beta=${beta}_latent=${latent_dim}_batch=${batch_size}_lr=${lr}_arch=${def}.out"
+                                2>&1 | tee -a "disdiff_adapters/scripts/out/${dataset}_vae_train_epoch=${max_epochs}_beta=${beta}_latent=${latent_dim}_batch=${batch_size}_lr=${lr}_arch=${arch}.out"
 done

@@ -1,29 +1,36 @@
 import torch
+import torch.nn as nn
 from lightning import LightningModule
 import matplotlib.pyplot as plt
 import torchvision.utils as vutils
 import os
 
-from disdiff_adapters.arch.vae import *
-from disdiff_adapters.utils import sample_from, pca_latent, display
+from disdiff_adapters.arch.vae import Encoder, Decoder, ResidualBlock, SimpleConv
+from disdiff_adapters.utils import sample_from, display
 from disdiff_adapters.loss import *
 
+
 class _VAE(torch.nn.Module) :
-    def __init__(self,
-                 in_channels: int,
-                 img_size: int,
-                 latent_dim: int) :
+    def __init__(self, in_channels: int, 
+                 img_size: int, 
+                 latent_dim: int, 
+                 activation: nn.Module=nn.LeakyReLU,
+                 res_block: nn.Module=SimpleConv):
         
         super().__init__()
 
         self.encoder = Encoder(in_channels=in_channels,
                                img_size=img_size,
-                               latent_dim=latent_dim,)
+                               latent_dim=latent_dim,
+                               activation=activation,
+                               res_block=res_block)
         
         self.decoder = Decoder(out_channels=in_channels,
                                img_size=img_size,
                                latent_dim=latent_dim,
-                               out_encoder_shape=self.encoder.out_encoder_shape)
+                               out_encoder_shape=self.encoder.out_encoder_shape,
+                               activation=activation,
+                               res_block=res_block)
         
     def forward(self, images: torch.Tensor, test: bool=False) :
         mus_logvars = self.encoder(images)
@@ -38,6 +45,8 @@ class VAEModule(LightningModule) :
                  in_channels: int,
                  img_size: int,
                  latent_dim: int,
+                 activation: nn.Module=nn.LeakyReLU,
+                 res_block: nn.Module=SimpleConv,
                  beta: float=1.0,
                  warm_up: bool=False,
                  kl_weights: float= 10e-4,
@@ -48,7 +57,9 @@ class VAEModule(LightningModule) :
 
         self.model = _VAE(in_channels=self.hparams.in_channels,
                           img_size=self.hparams.img_size,
-                          latent_dim=self.hparams.latent_dim)
+                          latent_dim=self.hparams.latent_dim,
+                          activation=self.hparams.activation,
+                          res_block=self.hparams.res_block)
         self.images_test_buff = None
         self.images_train_buff = None
     
@@ -151,7 +162,7 @@ class VAEModule(LightningModule) :
     
     def test_step(self, batch: tuple[torch.Tensor]) :
         images, labels = batch
-        image_hat_logits, mus_logvars = self.forward(images)
+        image_hat_logits, mus_logvars = self.forward(images, test=True)
 
         weighted_kl= self.hparams.beta*kl(*mus_logvars)
         reco = mse(image_hat_logits, images)

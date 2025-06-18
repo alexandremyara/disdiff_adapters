@@ -34,7 +34,7 @@ class CelebADataModule(LightningDataModule):
         batch_size: int=64,
         patch_size: tuple[int, list[int]] = (64, 64),
         num_workers: int = 4,
-        pin_memory: bool = False,
+        pin_memory: bool = True,
         **kwargs,
     ):
         super().__init__()

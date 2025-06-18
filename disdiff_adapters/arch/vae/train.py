@@ -103,12 +103,16 @@ def parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
+
+
+
 def main(flags: argparse.Namespace) :
 
     torch.set_float32_matmul_precision('medium')
     is_vae = True if flags.is_vae == "True" else False
     warm_up = True if flags.warm_up == "True" else False
 
+    res_block = ResidualBlock if flags.arch == "res" else SimpleConv
     
     # Load data_module
     match flags.dataset:
@@ -138,6 +142,7 @@ def main(flags: argparse.Namespace) :
         model = VAEModule(in_channels = in_channels,
                     img_size=img_size,
                     latent_dim=flags.latent_dim,
+                    res_block=res_block,
                     beta=flags.beta,
                     warm_up=warm_up,
                     kl_weights=klw,)
@@ -157,7 +162,7 @@ def main(flags: argparse.Namespace) :
             devices=flags.gpus,
 
             max_epochs=flags.max_epochs,
-            log_every_n_steps=20,
+            log_every_n_steps=10,
 
             logger=TensorBoardLogger(
                 save_dir=LOG_DIR+f"/{model_name}",
