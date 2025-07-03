@@ -251,7 +251,7 @@ class MultiDistillMeModule(LightningModule) :
 
             ### heatmap
             path_heatmap = os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"cov_{epoch}.png")
-            log_cross_cov_heatmap(*mus_logvars_s, *mus_logvars_t, path_heatmap)
+            log_cross_cov_heatmap(*mus_logvars_s, *mus_logvars_t, save_path=path_heatmap)
 
             ### latent space
             labels = self.labels_train_buff

@@ -17,14 +17,16 @@ class Shapes3DDataModule(LightningDataModule) :
                  val_path: str=Shapes3D.Path.VAL,
                  test_path: str=Shapes3D.Path.TEST,
                  ratio: int=0.8,
-                 batch_size: int=8) :
+                 batch_size: int=8,
+                 loader: DataLoader|None=None) :
         super().__init__()
         self.h5_path = h5_path
         self.train_path, self.val_path, self.test_path = train_path, val_path, test_path
         self.ratio = ratio
         self.batch_size = batch_size
+        self.loader = loader
 
-    def prepare_data(self, is_h5=False):
+    def prepare_data(self, is_h5: bool=False):
 
         if not (exists(self.train_path) and exists(self.val_path) and exists(self.test_path)):
             if is_h5 :
@@ -61,7 +63,7 @@ class Shapes3DDataModule(LightningDataModule) :
 
         else : pass
 
-    def setup(self, stage) :
+    def setup(self, stage: str|None) :
         if stage in ("fit", None) :
             print("loading of tensors - train")
             train_images, train_labels = torch.load(self.train_path)
@@ -75,12 +77,17 @@ class Shapes3DDataModule(LightningDataModule) :
             test_images, test_labels = torch.load(self.test_path)
             self.test_dataset = Shapes3DDataset(test_images, test_labels)
         print("tensors loaded.")
+        self.set_dataloader(self.loader)
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=16, shuffle=True)
+        if self.loader is None : return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=16, shuffle=True)
+        else : return self.loader
 
     def val_dataloader(self):
         return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=16)
 
     def test_dataloader(self):
         return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=16)
+    
+    def set_dataloader(self, loader: DataLoader|None) :
+        self.loader = loader
