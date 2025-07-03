@@ -160,6 +160,7 @@ def main(flags: argparse.Namespace) :
     trainer = Trainer(
             accelerator="auto",
             devices=flags.gpus,
+            gradient_clip_val= 3.0,
 
             max_epochs=flags.max_epochs,
             log_every_n_steps=10,

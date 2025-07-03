@@ -4,6 +4,9 @@ from torch import sort
 import numpy as np
 import matplotlib.pyplot as plt
 import math
+from PIL import Image, ImageDraw, ImageFont
+import seaborn as sns # type: ignore
+from disdiff_adapters.loss import *
 
 
 from sklearn.decomposition import PCA
@@ -55,43 +58,6 @@ def split(data: torch.Tensor, label: torch.Tensor, ratio: float=0.8) :
 
     return torch.tensor(train_data), torch.tensor(train_label), torch.tensor(test_data), torch.tensor(test_label)
 
-def collate_images(batch: list[torch.Tensor]):
-    """
-    ##### From a notebook made by Nicolas Bouriez  (HOW_TO_USE.ipynb - ChAdaViT)
-
-
-    Collate a batch of images into a list of channels, a list of labels and a mapping of the number of channels per image.
-
-    Args:
-        batch (list): A list of tuples of (img, label)
-
-    Return:
-        channels_list (torch.Tensor): A tensor of shape (X*num_channels, 1, height, width)
-        labels_list (torch.Tensor): A tensor of shape (batch_size, )
-        num_channels_list (list): A list of the number of channels per image
-    """
-    num_channels_list = []
-    channels_list = []
-    labels_list = [] 
-
-    # Iterate over the list of images and extract the channels
-    for image, label in batch:
-        labels_list.append(label)
-        num_channels = image.shape[0]
-        num_channels_list.append(num_channels)
-
-        for channel in range(num_channels):
-            channel_image = image[channel, :, :].unsqueeze(0)
-            channels_list.append(channel_image)
-
-    channels_list = torch.cat(channels_list, dim=0).unsqueeze(
-        1
-    )  # Shape: (X*num_channels, 1, height, width)
-    
-    batched_labels = torch.tensor(labels_list)
-
-    return channels_list, batched_labels, num_channels_list
-
 def display(batch: tuple[torch.Tensor]) :
     """
     Display a batch of RGB images. 
@@ -132,10 +98,10 @@ def sample_from(mu_logvar: tuple[torch.Tensor], test=False):
     if test: return mu
     else : return mu + torch.exp(0.5 * logvar) * eps
 
-def pca_latent(labels: torch.Tensor, 
+def display_latent(labels: torch.Tensor, 
                mu_logvars: None|tuple[torch.Tensor]=None,
                z: None|torch.Tensor=None, 
-               test: bool=False) :
+               test: bool=False,) :
     """
     Generate a plot to visualize in 2D the latent space.
     Ensure that if z=None, mu_logvars is not None.
@@ -158,16 +124,21 @@ def pca_latent(labels: torch.Tensor,
     if z is None :
         z = sample_from(mu_logvars, test=test)
 
-    latent_pca = pca.fit_transform(z.detach().cpu().numpy())
+    latent_pca = z.detach().cpu().numpy()
+    if not z.shape[1] in [1,2] : latent_pca = pca.fit_transform(latent_pca)
 
     for label in unique_labels:
-        idx = labels.squeeze(0) == label
-        pts = latent_pca[idx.squeeze(1)]
+        idx = (labels.squeeze(0) == label)
+        idx = idx.detach().cpu()
+        pts = latent_pca[idx.squeeze(1).cpu()]
+        print(labels.shape)
         plt.scatter(pts[:, 0], pts[:, 1],
                     color=label_to_color[label], label=label, alpha=0.7)
         plt.legend()
     plt.grid()
     plt.show()
+
+    
 
 def set_device(pref_gpu: int=0) -> str :
     """
@@ -195,3 +166,80 @@ def set_device(pref_gpu: int=0) -> str :
     print(f"current device is {torch.cuda.current_device()}")
     return device, is_gpu
  
+
+
+def merge_images(save_gen_path, save_gen_s_path, save_gen_t_path):
+    images = [Image.open(path) for path in [save_gen_path, save_gen_s_path, save_gen_t_path]]
+    labels = ["generation", "gen_s", "gen_t"]
+    widths = [img.width for img in images]
+    assert all(w == widths[0] for w in widths)
+
+    font_size = 20
+    try:
+        font = ImageFont.truetype("arial.ttf", font_size)
+    except IOError:
+        font = ImageFont.load_default()
+    text_height = font_size + 10
+    separator_height = 10
+    separator = Image.fromarray(np.zeros((separator_height, widths[0], 3), dtype=np.uint8))
+
+    final_parts = []
+    for i, (img, label) in enumerate(zip(images, labels)):
+        text_img = Image.new("RGB", (widths[0], text_height), color=(0, 0, 0))
+        draw = ImageDraw.Draw(text_img)
+        text_width = draw.textlength(label, font=font)
+        draw.text(((widths[0] - text_width) // 2, 5), label, fill=(255, 255, 255), font=font)
+        final_parts.append(text_img)
+        final_parts.append(img)
+        if i != len(images) - 1:
+            final_parts.append(separator)
+
+    total_height = sum(p.height for p in final_parts)
+    final_image = Image.new("RGB", (widths[0], total_height))
+
+    y = 0
+    for part in final_parts:
+        final_image.paste(part, (0, y))
+        y += part.height
+    
+    return final_image
+
+
+def merge_images_with_black_gap(image_paths, gap=10):
+    images = [Image.open(p) for p in image_paths]
+    widths = [img.width for img in images]
+    if len(set(widths)) != 1:
+        raise ValueError("Toutes les images doivent avoir la même largeur")
+    W = widths[0]
+    separator = Image.new("RGB", (W, gap), color=(0, 0, 0))
+    parts = []
+    for img in images[:-1]:
+        parts.append(img)
+        parts.append(separator)
+    parts.append(images[-1])
+    total_h = sum(p.height for p in parts)
+    merged = Image.new("RGB", (W, total_h), color=(0, 0, 0))
+    y = 0
+    for p in parts:
+        merged.paste(p, (0, y))
+        y += p.height
+    return merged
+
+
+def log_cross_cov_heatmap(mu_s, logvar_s, mu_t, logvar_t, save_path: str):
+
+    cov_mu = cross_cov(mu_s, mu_t).detach().cpu().numpy()
+    assert cov_mu.shape == (mu_s.shape[1], mu_t.shape[1]), "ERROR COV MATRIX SHAPE"
+    cov_logvar = cross_cov(logvar_s, logvar_t).detach().cpu().numpy()
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+
+    sns.heatmap(cov_mu, ax=axes[0], cmap="coolwarm", center=0, cbar=True)
+    axes[0].set_title("cross_cov(mu_s, mu_t)")
+
+    sns.heatmap(cov_logvar, ax=axes[1], cmap="coolwarm", center=0, cbar=True)
+    axes[1].set_title("cross_cov(logvar_s, logvar_t)")
+
+    plt.tight_layout()
+    plt.savefig(save_path, bbox_inches='tight')
+    plt.close(fig)

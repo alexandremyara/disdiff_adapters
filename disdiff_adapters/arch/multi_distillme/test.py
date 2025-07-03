@@ -97,6 +97,27 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--l_cov",
+        type=float,
+        default=1,
+        help="use cross cov loss"
+    )
+
+    parser.add_argument(
+        "--l_nce",
+        type=float,
+        default=1,
+        help="use nce loss"
+    )
+
+    parser.add_argument(
+        "--l_anti_nce",
+        type=float,
+        default=1,
+        help="use anti nce loss"
+    )
+
+    parser.add_argument(
         "--arch",
         type=str,
         default="def",
@@ -120,7 +141,7 @@ def main(flags: argparse.Namespace) :
     warm_up = True if flags.warm_up == "True" else False
 
     res_block = ResidualBlock if flags.arch == "res" else SimpleConv
-    
+
     print("\n\nYOU ARE LOADING A VAE\n\n")
     # Seed
     
@@ -146,8 +167,7 @@ def main(flags: argparse.Namespace) :
             raise ValueError("Error flags.dataset")
         
     model_name="md"
-    version=f"{model_name}_epoch={flags.max_epochs}_beta={(flags.beta_s, flags.beta_t)}_latent={(flags.latent_dim_t, flags.latent_dim_s)}_batch={flags.batch_size}_warm_up={warm_up}_lr={flags.lr}_arch={flags.arch}"
- 
+    version=f"{model_name}_epoch={flags.max_epochs}_beta={(flags.beta_s, flags.beta_t)}_latent={(flags.latent_dim_t, flags.latent_dim_s)}_batch={flags.batch_size}_warm_up={warm_up}_lr={flags.lr}_arch={flags.arch}+l_cov={flags.l_cov}+l_nce={flags.l_nce}+l_anti_nce={flags.l_anti_nce}" 
     ckpt_path = glob.glob(f"{LOG_DIR}/{model_name}/{flags.dataset}/{version}/checkpoints/*.ckpt")[0]
     model = MultiDistillMeModule.load_from_checkpoint(ckpt_path)
     

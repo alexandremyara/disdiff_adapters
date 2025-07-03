@@ -3,7 +3,7 @@ from lightning import LightningModule
 import matplotlib.pyplot as plt
 
 from disdiff_adapters.arch.vae import *
-from disdiff_adapters.utils import sample_from, pca_latent, display
+from disdiff_adapters.utils import *
 from disdiff_adapters.loss import *
 
 class _AE(torch.nn.Module) :

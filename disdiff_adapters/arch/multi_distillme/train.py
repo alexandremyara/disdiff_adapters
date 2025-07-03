@@ -104,6 +104,27 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--l_cov",
+        type=float,
+        default=1,
+        help="use cross cov loss"
+    )
+
+    parser.add_argument(
+        "--l_nce",
+        type=float,
+        default=1,
+        help="use nce loss"
+    )
+
+    parser.add_argument(
+        "--l_anti_nce",
+        type=float,
+        default=1,
+        help="use anti nce loss"
+    )
+
+    parser.add_argument(
         "--gpus",
         type=to_list,
         default=["0"],
@@ -112,15 +133,13 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-
-
 def main(flags: argparse.Namespace) :
 
     torch.set_float32_matmul_precision('medium')
     warm_up = True if flags.warm_up == "True" else False
 
     res_block = ResidualBlock if flags.arch == "res" else SimpleConv
-    
+
     # Load data_module
     match flags.dataset:
         case "bloodmnist":
@@ -143,7 +162,6 @@ def main(flags: argparse.Namespace) :
         case _ :
             raise ValueError("Error flags.dataset")
 
-
     print("\nVAE module\n") 
     model = MultiDistillMeModule(in_channels = in_channels,
                 img_size=img_size,
@@ -153,17 +171,20 @@ def main(flags: argparse.Namespace) :
                 beta_s=flags.beta_s,
                 beta_t=flags.beta_t,
                 warm_up=warm_up,
-                kl_weight=klw,)
-    model_name = "md"
-
+                kl_weight=klw,
+                l_cov=flags.l_cov,
+                l_nce=flags.l_nce,
+                l_anti_nce=flags.l_anti_nce)
     
-    version=f"{model_name}_epoch={flags.max_epochs}_beta={(flags.beta_s, flags.beta_t)}_latent={(flags.latent_dim_t, flags.latent_dim_s)}_batch={flags.batch_size}_warm_up={warm_up}_lr={flags.lr}_arch={flags.arch}"
+    model_name = "md"
+    
+    version=f"{model_name}_epoch={flags.max_epochs}_beta={(flags.beta_s, flags.beta_t)}_latent={(flags.latent_dim_t, flags.latent_dim_s)}_batch={flags.batch_size}_warm_up={warm_up}_lr={flags.lr}_arch={flags.arch}+l_cov={flags.l_cov}+l_nce={flags.l_nce}+l_anti_nce={flags.l_anti_nce}" 
     print(f"\nVERSION : {version}\n")
 
     trainer = Trainer(
             accelerator="auto",
             devices=flags.gpus,
-
+            gradient_clip_val= 3.0,
             max_epochs=flags.max_epochs,
             log_every_n_steps=10,
 
@@ -179,8 +200,6 @@ def main(flags: argparse.Namespace) :
             ]
         )
     
-
-
     trainer.fit(model, data_module)
 
 

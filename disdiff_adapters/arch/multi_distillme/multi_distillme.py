@@ -4,9 +4,11 @@ from lightning import LightningModule
 import matplotlib.pyplot as plt
 import os
 import torchvision.utils as vutils
+from PIL import Image
+import numpy as np
 
 from disdiff_adapters.arch.vae import *
-from disdiff_adapters.utils import sample_from, pca_latent, display
+from disdiff_adapters.utils import *
 from disdiff_adapters.loss import *
 
 
@@ -39,8 +41,8 @@ class _MultiDistillMe(torch.nn.Module) :
                                out_encoder_shape=self.encoder_s.out_encoder_shape)
         
         self.labels_buff = []
-        self.latent_buff = []
-        
+        self.latent_buff = {"s":[], "t":[]}
+
     def forward(self, images: torch.Tensor) :
 
         #forward s - semble encoder la couleur
@@ -71,7 +73,9 @@ class MultiDistillMeModule(LightningModule) :
                  beta_t: float=1.0,
                  warm_up:bool =False,
                  kl_weight: float= 10e-4,
-                 l_cov: float=1,) :
+                 l_cov: float=1,
+                 l_nce: float=1,
+                 l_anti_nce: float=1,) :
         
         super().__init__()
         self.save_hyperparameters()
@@ -86,11 +90,16 @@ class MultiDistillMeModule(LightningModule) :
         self.images_test_buff = None
         self.images_train_buff = None
         self.z_ref = None
+        self.constrastive = MultiClassSupConLoss(temperature=1e-2)
+        self.latent_buff = self.model.latent_buff
+        self.labels_buff = self.model.labels_buff
+        self.current_batch = 0
+
 
     def configure_optimizers(self):
         return torch.optim.AdamW(self.model.parameters())
     
-    def generate(self, nb_samples: int=8) :
+    def generate(self, nb_samples: int=16) :
         eps_s = torch.randn_like(torch.zeros([nb_samples, self.hparams.latent_dim_s])).to(self.device, torch.float32)
         eps_t = torch.randn_like(torch.zeros([nb_samples, self.hparams.latent_dim_t])).to(self.device, torch.float32)
 
@@ -100,14 +109,14 @@ class MultiDistillMeModule(LightningModule) :
         x_hat_logits = self.model.decoder(z)
         return x_hat_logits
 
-    def generate_cond(self, nb_samples: int=8, cond: str="t") :
+    def generate_cond(self, nb_samples: int=16, cond: str="t", pos: int=0) :
         if cond == "t" :
             eps_t = torch.randn_like(torch.zeros([nb_samples, self.hparams.latent_dim_t])).to(self.device, torch.float32)
-            z_s = torch.stack(nb_samples*[self.z_ref["s"]])
+            z_s = torch.stack(nb_samples*[self.z_ref["s"][pos]])
             z = self.model.merge_operation(z_s, eps_t)
         elif cond == "s" :
             eps_s = torch.randn_like(torch.zeros([nb_samples, self.hparams.latent_dim_s])).to(self.device, torch.float32)
-            z_t = torch.stack(nb_samples*[self.z_ref["t"]])
+            z_t = torch.stack(nb_samples*[self.z_ref["t"][pos]])
             z = self.model.merge_operation(eps_s, z_t)
         else : raise ValueError("cond has to be equal to ")
 
@@ -134,29 +143,45 @@ class MultiDistillMeModule(LightningModule) :
             axes[i,1].set_title("reco")
         plt.tight_layout()
         plt.show()
+        return mus_logvars_s, mus_logvars_t, images_gen, z_s, z_t, z
 
     def forward(self, images: torch.Tensor, test=False) :
         mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z = self.model(images)
         return mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z
     
-    def loss(self, mus_logvars_s, mus_logvars_t, image_hat_logits, images, log_components=False) :
+    def loss(self, mus_logvars_s: torch.Tensor, 
+             mus_logvars_t: torch.Tensor, 
+             image_hat_logits: torch.Tensor, 
+             images: torch.Tensor, 
+             z_s: torch.Tensor,
+             z_t: torch.Tensor,
+             labels=None, 
+             log_components: bool=False) :
 
         weighted_kl_s = self.hparams.kl_weight*self.hparams.beta_s*kl(*mus_logvars_s)
         weighted_kl_t = self.hparams.kl_weight*self.hparams.beta_t*kl(*mus_logvars_t)
         reco = mse(image_hat_logits, images)
-        #cov = decorrelate_params(*mus_logvars_s, *mus_logvars_t)
+        #cross_cov = decorrelate_params(*mus_logvars_s, *mus_logvars_t, l_var=0)/(self.hparams.latent_dim_s*self.hparams.latent_dim_t)
+        #nce = self.constrastive(z_t, labels)
 
+        
         if log_components :
             self.log("loss/kl_s", weighted_kl_s)
             self.log("loss/kl_t", weighted_kl_t)
             self.log("loss/reco", reco)
+            #self.log("loss/cov", cross_cov)
+            #self.log("loss/nce", nce)
 
-        return weighted_kl_t+weighted_kl_s+reco
+        #loss_value = weighted_kl_t+weighted_kl_s+reco+self.hparams.l_cov*cross_cov+self.hparams.l_nce*nce
+        loss_value = weighted_kl_t+weighted_kl_s+reco
+        return loss_value
     
     def training_step(self, batch: tuple[torch.Tensor]) :
         images, labels = batch
+
         mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z = self.forward(images)
-        loss = self.loss(mus_logvars_s, mus_logvars_t, image_hat_logits, images, log_components=True)
+        loss = self.loss(mus_logvars_s, mus_logvars_t, image_hat_logits, images, z_s, z_t, 
+                         labels=labels[:, 0], log_components=True)
 
         print(f"Train loss: {loss}")
         
@@ -167,15 +192,18 @@ class MultiDistillMeModule(LightningModule) :
 
         if self.images_train_buff is None : 
             self.images_train_buff = images
-            self.image_ref = self.images_train_buff[0]
-            self.z_ref = {"s":z_s[0], "t": z_t[0]}
-
+            self.labels_train_buff = labels
+        if self.current_batch <= 10 :   
+            self.labels_buff.append(labels[:,0].unsqueeze(1))
+            self.latent_buff["s"].append(z_s)
+            self.latent_buff["t"].append(z_t)
+        self.current_batch += 1
         return loss
 
     def validation_step(self, batch: tuple[torch.Tensor]):
         images, labels = batch
         mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z = self.forward(images)
-        loss = self.loss(mus_logvars_s, mus_logvars_t, image_hat_logits, images)
+        loss = self.loss(mus_logvars_s, mus_logvars_t, image_hat_logits, images, z_s, z_t, labels=labels[:, 0])
 
         self.log("loss/val", loss)
         print(f"Val loss: {loss}")
@@ -197,40 +225,55 @@ class MultiDistillMeModule(LightningModule) :
 
     def on_train_epoch_end(self):
         epoch = self.current_epoch
+        self.current_batch = 0
 
-        if epoch % 10 == 0:
+        self.labels_buff = torch.cat(self.labels_buff)
+        self.latent_buff["s"] = torch.cat(self.latent_buff["s"])
+        self.latent_buff["t"] = torch.cat(self.latent_buff["t"])
+
+        if epoch % 5 == 0:
             try : os.mkdir(os.path.join(self.logger.log_dir, f"epoch_{epoch}"))
             except FileExistsError as e : pass
 
-            self.show_reconstruct(self.images_train_buff) #display images and reconstruction in interactive mode; save the plot in plt.gcf() if non interactive
+            #set z_ref
+            _, _, _, z_s, z_t, z = self.forward(self.images_train_buff, test=True)
+            self.z_ref = {"s":z_s, "t": z_t}
+
+
+            mus_logvars_s, mus_logvars_t, images_gen, z_s, z_t, z = self.show_reconstruct(self.images_train_buff) #display images and reconstruction in interactive mode; save the plot in plt.gcf() if non interactive
             #save the recontruction plot saved in plt.gcf()
             save_reco_path = os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"reco_{epoch}.png")
-            plt.gcf().savefig(save_reco_path)
+            fig = plt.gcf()
+            fig.savefig(save_reco_path)
+            plt.close(fig)
 
-            #save the generate images
-            images_gen = self.generate()
-            save_gen_path = os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"gen_{epoch}.png")
-            vutils.save_image(images_gen.detach().cpu(), save_gen_path)
-             
-            #save the generate images
-            images_gen = self.generate()
-            save_gen_path = os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"gen_{epoch}.png")
-            vutils.save_image(images_gen.detach().cpu(), save_gen_path)
-              
-            #save the cond generate image s
-            images_cond_s_gen = self.generate_cond(cond="s")
-            images_cond_s_gen_ref = torch.cat([images_cond_s_gen.detach().cpu(), self.image_ref.detach().cpu().unsqueeze(0)])
-            save_gen_s_path = os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"gen_s_{epoch}.png")
-            vutils.save_image(images_cond_s_gen_ref, save_gen_s_path)
+            self.log_gen_images()
 
-            #save the cond generate image t
-            images_cond_t_gen = self.generate_cond(cond="t")
-            images_cond_t_gen_ref = torch.cat([images_cond_t_gen.detach().cpu(), self.image_ref.detach().cpu().unsqueeze(0)])
-            save_gen_t_path = os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"gen_t_{epoch}.png")
-            vutils.save_image(images_cond_t_gen_ref.detach().cpu(), save_gen_t_path)
+            ### heatmap
+            path_heatmap = os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"cov_{epoch}.png")
+            log_cross_cov_heatmap(*mus_logvars_s, *mus_logvars_t, path_heatmap)
+
+            ### latent space
+            labels = self.labels_train_buff
+
+            display_latent(labels=self.labels_buff, z=self.latent_buff["s"])
+            fig = plt.gcf()
+            fig.savefig("z_s.png")
+            plt.close(fig)
+
+            display_latent(labels=self.labels_buff, z=self.latent_buff["s"])
+            fig = plt.gcf()
+            fig.savefig("z_t.png")
+            plt.close(fig)
+            latent_img = merge_images_with_black_gap(["z_s.png", "z_t.png"])
+            latent_img.save(os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"latent_space_{epoch}.png"))
 
         self.images_train_buff = None
+        self.labels_train_buff = None
         self.z_ref = None
+
+        self.latent_buff = {"s":[], "t":[]}
+        self.labels_buff = []
 
     def on_test_end(self):
         images_gen = self.generate()
@@ -244,3 +287,44 @@ class MultiDistillMeModule(LightningModule) :
         self.logger.experiment.add_figure("img/reco", plt.gcf())
 
         vutils.save_image(images_gen.detach().cpu(), os.path.join(self.logger.log_dir, "gen.png"))
+
+    def log_gen_images(self) :
+        epoch = self.current_epoch
+
+        #save the generate images
+        images_gen = self.generate()
+        save_gen_path = os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"gen_{epoch}.png")
+        vutils.save_image(images_gen.detach().cpu(), save_gen_path)
+            
+        #save the cond generate image s
+        for i in range(4) :
+            images_cond_s_gen = self.generate_cond(cond="s", pos=i)
+            images_cond_s_gen_ref = torch.cat([images_cond_s_gen.detach().cpu(), self.images_train_buff[i].detach().cpu().unsqueeze(0)])
+            save_gen_s_path = os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"gen_s_{epoch}_{i}.png")
+            vutils.save_image(images_cond_s_gen_ref, save_gen_s_path)
+
+        #save the cond generate image t
+        for i in range(4) :
+            images_cond_t_gen = self.generate_cond(cond="t", pos=i)
+            images_cond_t_gen_ref = torch.cat([images_cond_t_gen.detach().cpu(), self.images_train_buff[i].detach().cpu().unsqueeze(0)])
+            save_gen_t_path = os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"gen_t_{epoch}_{i}.png")
+            vutils.save_image(images_cond_t_gen_ref.detach().cpu(), save_gen_t_path)
+
+        ### Merge in one image
+        final_gen_s = merge_images_with_black_gap(
+                                    [ os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"gen_s_{epoch}_{i}.png") for i in range(4)]
+                                    )
+        final_gen_t = merge_images_with_black_gap(
+                        [ os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"gen_t_{epoch}_{i}.png") for i in range(4)]
+                        )
+        final_gen_s.save("final_gen_s.png")
+        final_gen_t.save("final_gen_t.png")
+        final_image = merge_images(save_gen_path, "final_gen_s.png", "final_gen_t.png")
+        save_gen_all_path = os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"gen_all_{epoch}.png")
+        final_image.save(save_gen_all_path)
+
+        os.remove("final_gen_s.png")
+        os.remove("final_gen_t.png")
+        for i in range(4) : 
+            os.remove(os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"gen_s_{epoch}_{i}.png"))
+            os.remove(os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"gen_t_{epoch}_{i}.png"))
