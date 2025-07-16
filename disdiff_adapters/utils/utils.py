@@ -100,7 +100,8 @@ def sample_from(mu_logvar: tuple[torch.Tensor], test=False):
 
 def display_latent(labels: torch.Tensor, 
                mu_logvars: None|tuple[torch.Tensor]=None,
-               z: None|torch.Tensor=None, 
+               z: None|torch.Tensor=None,
+               title: str="latent space", 
                test: bool=False,) :
     """
     Generate a plot to visualize in 2D the latent space.
@@ -124,17 +125,31 @@ def display_latent(labels: torch.Tensor,
     if z is None :
         z = sample_from(mu_logvars, test=test)
 
+    #pca 
     latent_pca = z.detach().cpu().numpy()
-    if not z.shape[1] in [1,2] : latent_pca = pca.fit_transform(latent_pca)
+    explained_axis = [-1, -1]
+    if not z.shape[1] in [1,2] : 
+        latent_pca = pca.fit_transform(latent_pca)
+        explained_axis = pca.explained_variance_ratio_
 
-    for label in unique_labels:
+    #variance explained : if -2, no pca has been run
+    explained = np.sum(explained_axis)
+
+    #plot
+    for label in np.random.permutation(unique_labels):
         idx = (labels.squeeze(0) == label)
         idx = idx.detach().cpu()
         pts = latent_pca[idx.squeeze(1).cpu()]
-        print(labels.shape)
-        plt.scatter(pts[:, 0], pts[:, 1],
-                    color=label_to_color[label], label=label, alpha=0.7)
+            
+        if z.shape[1] == 1 : pts_y = torch.zeros_like(pts[:, 0])
+        else : pts_y = pts[:, 1]
+        plt.scatter(pts[:, 0], pts_y,
+                    color=label_to_color[label], label=label, alpha=0.3)
+        plt.xlabel(f"{explained_axis[0]}")
+        plt.ylabel(f"{explained_axis[1]}")
+
         plt.legend()
+    plt.title(title+f" explained : {explained}")
     plt.grid()
     plt.show()
 
@@ -227,14 +242,13 @@ def merge_images_with_black_gap(image_paths, gap=10):
 
 
 def log_cross_cov_heatmap(mu_s, logvar_s, mu_t, logvar_t, save_path: str):
-
     cov_mu = cross_cov(mu_s, mu_t).detach().cpu().numpy()
     assert cov_mu.shape == (mu_s.shape[1], mu_t.shape[1]), "ERROR COV MATRIX SHAPE"
     cov_logvar = cross_cov(logvar_s, logvar_t).detach().cpu().numpy()
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
-    sns.heatmap(cov_mu, ax=axes[0], cmap="coolwarm", center=0, cbar=True)
+    sns.heatmap(cov_mu, ax=axes[0], cmap="coolwarm", center=0, cbar=True,)
     axes[0].set_title("cross_cov(mu_s, mu_t)")
 
     sns.heatmap(cov_logvar, ax=axes[1], cmap="coolwarm", center=0, cbar=True)

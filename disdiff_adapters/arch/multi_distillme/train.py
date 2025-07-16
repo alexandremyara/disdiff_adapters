@@ -2,6 +2,8 @@ import argparse
 import torch
 from lightning import LightningModule
 import matplotlib.pyplot as plt
+import sys
+import os
 
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -10,6 +12,13 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from lightning import Trainer
 import lightning as L
 
+
+os.chdir("/projects/compures/alexandre/disdiff_adapters")
+
+sys.path.append("/projects/compures/alexandre/disdiff_adapters/")
+print(sys.path)
+
+ 
 from disdiff_adapters.arch.multi_distillme import MultiDistillMeModule
 from disdiff_adapters.arch.vae.block import SimpleConv, ResidualBlock
 from disdiff_adapters.utils import *
@@ -127,13 +136,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--gpus",
         type=to_list,
-        default=["0"],
+        default="0",
         help="comma seperated list of gpus"
     )
     return parser.parse_args()
 
 
 def main(flags: argparse.Namespace) :
+
+
 
     torch.set_float32_matmul_precision('medium')
     warm_up = True if flags.warm_up == "True" else False
@@ -166,7 +177,7 @@ def main(flags: argparse.Namespace) :
     model = MultiDistillMeModule(in_channels = in_channels,
                 img_size=img_size,
                 latent_dim_s=flags.latent_dim_s, 
-                latent_dim_t=flags.latent_dim_s,
+                latent_dim_t=flags.latent_dim_t,
                 res_block=res_block,
                 beta_s=flags.beta_s,
                 beta_t=flags.beta_t,
@@ -174,7 +185,7 @@ def main(flags: argparse.Namespace) :
                 kl_weight=klw,
                 l_cov=flags.l_cov,
                 l_nce=flags.l_nce,
-                l_anti_nce=flags.l_anti_nce)
+                l_anti_nce=flags.l_anti_nce,)
     
     model_name = "md"
     

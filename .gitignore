@@ -2,7 +2,9 @@ disdiff_adapters/data/*
 *.ckpt
 **/__pycache__/*
 *.pyc
-
+*.png
+*.pth
+*.pt
 .venv/*
 .python-version*
 .env

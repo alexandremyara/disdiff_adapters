@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "disdiff",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "disdiff_adapters/arch/multi_distillme/train.py",
+            "args": [
+                "--latent_dim_t=2",
+                "--latent_dim_s=126",
+            ],
+            "console": "integratedTerminal"
+        },
+    ],
+}

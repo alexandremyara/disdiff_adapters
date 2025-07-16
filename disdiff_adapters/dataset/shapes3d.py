@@ -5,7 +5,7 @@ from disdiff_adapters.utils.const import Shapes3D
 
 class Shapes3DDataset(Dataset) :
 
-    def __init__(self, images, labels):
+    def __init__(self, images: torch.Tensor, labels: torch.Tensor):
         self.images, self.labels = images, labels
         assert(len(images)==len(labels)), "Number of images and labels doesn't match" 
 

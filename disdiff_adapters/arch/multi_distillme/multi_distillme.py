@@ -90,11 +90,10 @@ class MultiDistillMeModule(LightningModule) :
         self.images_test_buff = None
         self.images_train_buff = None
         self.z_ref = None
-        self.constrastive = MultiClassSupConLoss(temperature=1e-2)
+        self.constrastive = InfoNCESupervised()
         self.latent_buff = self.model.latent_buff
         self.labels_buff = self.model.labels_buff
         self.current_batch = 0
-
 
     def configure_optimizers(self):
         return torch.optim.AdamW(self.model.parameters())
@@ -147,6 +146,7 @@ class MultiDistillMeModule(LightningModule) :
 
     def forward(self, images: torch.Tensor, test=False) :
         mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z = self.model(images)
+
         return mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z
     
     def loss(self, mus_logvars_s: torch.Tensor, 
@@ -161,19 +161,20 @@ class MultiDistillMeModule(LightningModule) :
         weighted_kl_s = self.hparams.kl_weight*self.hparams.beta_s*kl(*mus_logvars_s)
         weighted_kl_t = self.hparams.kl_weight*self.hparams.beta_t*kl(*mus_logvars_t)
         reco = mse(image_hat_logits, images)
-        #cross_cov = decorrelate_params(*mus_logvars_s, *mus_logvars_t, l_var=0)/(self.hparams.latent_dim_s*self.hparams.latent_dim_t)
-        #nce = self.constrastive(z_t, labels)
+        #cov = decorrelate_params(*mus_logvars_s, *mus_logvars_t, l_var=0)/(self.hparams.latent_dim_s*self.hparams.latent_dim_t)
+        nce = self.constrastive(z_t, labels)
 
         
         if log_components :
             self.log("loss/kl_s", weighted_kl_s)
             self.log("loss/kl_t", weighted_kl_t)
             self.log("loss/reco", reco)
-            #self.log("loss/cov", cross_cov)
-            #self.log("loss/nce", nce)
+            #self.log("loss/cov", cov)
+            self.log("loss/nce", nce)
 
-        #loss_value = weighted_kl_t+weighted_kl_s+reco+self.hparams.l_cov*cross_cov+self.hparams.l_nce*nce
-        loss_value = weighted_kl_t+weighted_kl_s+reco
+        #loss_value = weighted_kl_t+weighted_kl_s+reco+self.hparams.l_cov*cov+self.hparams.l_nce*nce
+        #loss_value = weighted_kl_t+weighted_kl_s+reco
+        loss_value = weighted_kl_t+weighted_kl_s+reco+self.hparams.l_nce*nce
         return loss_value
     
     def training_step(self, batch: tuple[torch.Tensor]) :
@@ -193,7 +194,7 @@ class MultiDistillMeModule(LightningModule) :
         if self.images_train_buff is None : 
             self.images_train_buff = images
             self.labels_train_buff = labels
-        if self.current_batch <= 10 :   
+        if self.current_batch <= 700 :   
             self.labels_buff.append(labels[:,0].unsqueeze(1))
             self.latent_buff["s"].append(z_s)
             self.latent_buff["t"].append(z_t)
@@ -231,11 +232,11 @@ class MultiDistillMeModule(LightningModule) :
         self.latent_buff["s"] = torch.cat(self.latent_buff["s"])
         self.latent_buff["t"] = torch.cat(self.latent_buff["t"])
 
-        if epoch % 5 == 0:
+        if epoch % 1 == 0:
             try : os.mkdir(os.path.join(self.logger.log_dir, f"epoch_{epoch}"))
             except FileExistsError as e : pass
 
-            #set z_ref
+            #set z_ref : use 32 first images given by the loader - used for evaluate reco and gen
             _, _, _, z_s, z_t, z = self.forward(self.images_train_buff, test=True)
             self.z_ref = {"s":z_s, "t": z_t}
 
@@ -261,7 +262,7 @@ class MultiDistillMeModule(LightningModule) :
             fig.savefig("z_s.png")
             plt.close(fig)
 
-            display_latent(labels=self.labels_buff, z=self.latent_buff["s"])
+            display_latent(labels=self.labels_buff, z=self.latent_buff["t"])
             fig = plt.gcf()
             fig.savefig("z_t.png")
             plt.close(fig)
