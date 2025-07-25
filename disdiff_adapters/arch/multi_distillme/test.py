@@ -125,9 +125,16 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--experience",
+        type=str,
+        default="",
+        help="Name of the experience"
+    )
+
+    parser.add_argument(
         "--gpus",
         type=to_list,
-        default=["0"],
+        default="0",
         help="comma seperated list of gpus"
     )
     return parser.parse_args()
@@ -183,7 +190,7 @@ def main(flags: argparse.Namespace) :
 
             logger=TensorBoardLogger(
                 save_dir=LOG_DIR+f"/{model_name}",
-                name=flags.dataset,
+                name=flags.dataset+"/"+flags.experience,
                 version=version,
                 default_hp_metric=False,
             ),

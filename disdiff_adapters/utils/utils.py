@@ -91,7 +91,7 @@ def display(batch: tuple[torch.Tensor]) :
         ax.imshow(img.permute(1,2,0).numpy())
         ax.set_title(f"{labels[i].numpy()}")
 
-def sample_from(mu_logvar: tuple[torch.Tensor], test=False):
+def sample_from(mu_logvar: tuple[torch.Tensor], test=False) -> torch.Tensor :
     mu, logvar = mu_logvar
     eps = torch.randn_like(logvar)
     
@@ -241,7 +241,7 @@ def merge_images_with_black_gap(image_paths, gap=10):
     return merged
 
 
-def log_cross_cov_heatmap(mu_s, logvar_s, mu_t, logvar_t, save_path: str):
+def log_cross_cov_heatmap(mu_s, logvar_s, mu_t, logvar_t, save_path: str, interactive: bool=False):
     cov_mu = cross_cov(mu_s, mu_t).detach().cpu().numpy()
     assert cov_mu.shape == (mu_s.shape[1], mu_t.shape[1]), "ERROR COV MATRIX SHAPE"
     cov_logvar = cross_cov(logvar_s, logvar_t).detach().cpu().numpy()
@@ -255,5 +255,6 @@ def log_cross_cov_heatmap(mu_s, logvar_s, mu_t, logvar_t, save_path: str):
     axes[1].set_title("cross_cov(logvar_s, logvar_t)")
 
     plt.tight_layout()
+    if interactive : plt.show()
     plt.savefig(save_path, bbox_inches='tight')
     plt.close(fig)

@@ -89,7 +89,7 @@ def parse_args() -> argparse.Namespace:
         "--batch_size",
         type=int,
         help="batch size",
-        default=10
+        default=32
     )
 
     parser.add_argument(
@@ -115,22 +115,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--l_cov",
         type=float,
-        default=1,
+        default=0,
         help="use cross cov loss"
     )
 
     parser.add_argument(
         "--l_nce",
         type=float,
-        default=1,
+        default=1e-3,
         help="use nce loss"
     )
 
     parser.add_argument(
         "--l_anti_nce",
         type=float,
-        default=1,
+        default=0,
         help="use anti nce loss"
+    )
+
+    parser.add_argument(
+        "--experience",
+        type=str,
+        default="",
+        help="Name of the experience"
     )
 
     parser.add_argument(
@@ -197,11 +204,11 @@ def main(flags: argparse.Namespace) :
             devices=flags.gpus,
             gradient_clip_val= 3.0,
             max_epochs=flags.max_epochs,
-            log_every_n_steps=10,
+            log_every_n_steps=5,
 
             logger=TensorBoardLogger(
                 save_dir=LOG_DIR+f"/{model_name}",
-                name=flags.dataset,
+                name=flags.dataset+"/"+flags.experience,
                 version=version,
                 default_hp_metric=False,
             ),
