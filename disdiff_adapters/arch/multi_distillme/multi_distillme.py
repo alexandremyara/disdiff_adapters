@@ -3,6 +3,7 @@ import torch.nn as nn
 from lightning import LightningModule
 import matplotlib.pyplot as plt
 import os
+import math
 from os.path import join
 import torchvision.utils as vutils
 from PIL import Image
@@ -41,7 +42,7 @@ class _MultiDistillMe(torch.nn.Module) :
                                res_block=res_block,
                                out_encoder_shape=self.encoder_s.out_encoder_shape)
 
-    def forward(self, images: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, images: torch.Tensor) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor], torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
 
         #forward s - semble encoder la couleur
         mus_logvars_s = self.encoder_s(images)
@@ -66,18 +67,19 @@ class MultiDistillMeModule(LightningModule) :
                  img_size: int,
                  latent_dim_s: int,
                  latent_dim_t: int,
+                 select_factor: int=0,
                  res_block: nn.Module=ResidualBlock,
                  beta_s: float=1.0,
                  beta_t: float=1.0,
-                 warm_up:bool =False,
-                 kl_weight: float= 10e-4,
-                 l_cov: float=0,
+                 warm_up: bool=False,
+                 kl_weight: float= 1e-6,
+                 type: str="all",
+                 l_cov: float=0.0,
                  l_nce: float=1e-3,
-                 l_anti_nce: float=0,) :
+                 l_anti_nce: float=0.0,) :
         
         super().__init__()
         self.save_hyperparameters()
-
         self.model = _MultiDistillMe(in_channels=self.hparams.in_channels,
                                      img_size=self.hparams.img_size,
                                      latent_dim_s=self.hparams.latent_dim_s,
@@ -106,25 +108,35 @@ class MultiDistillMeModule(LightningModule) :
         x_hat_logits = self.model.decoder(z)
         return x_hat_logits
 
-    def generate_cond(self, nb_samples: int=16, cond: str="t", pos: int=0) :
+    def generate_cond(self, nb_samples: int=16, cond: str="t", pos: int=0, z_t=None, z_s=None) :
+        assert (z_t is None) == (z_s is None), "You must specified z_s and z_t, or none of them"
+        if z_t is None : 
+            z_t= self.latent_train_buff["t"]
+            z_s = self.latent_train_buff["s"]
+        else : print("interactive mode : on")
+
         if cond == "t" :
             #eps_t = torch.randn_like(torch.zeros([nb_samples, self.hparams.latent_dim_t])).to(self.device, torch.float32)
-            nb_sample_latent = self.latent_train_buff["t"].shape[0]
-            idx_t = torch.randint_like(torch.zeros([nb_samples]), high=nb_sample_latent, dtype=torch.int32)
-            eps_t = self.latent_train_buff["t"][idx_t].to(self.device)
-            z_s = torch.stack(nb_samples*[self.latent_train_buff["s"][pos]]).to(self.device)
+            nb_sample_latent = z_t.shape[0]
+            assert nb_samples <= nb_sample_latent, "Too much points"
 
-            assert z_s.device == eps_t.device, "z_s, z_t have to be on the same device"
-            z = self.model.merge_operation(z_s, eps_t)
+            idx_t = torch.randint_like(torch.zeros([nb_samples]), high=nb_sample_latent, dtype=torch.int32)
+            eps_t = z_t[idx_t].to(self.device)
+            eps_s = torch.stack(nb_samples*[z_s[pos]]).to(self.device)
+
+            assert eps_s.device == eps_t.device, "eps_s, eps_t have to be on the same device"
+            z = self.model.merge_operation(eps_s, eps_t)
         elif cond == "s" :
             #eps_s = torch.randn_like(torch.zeros([nb_samples, self.hparams.latent_dim_s])).to(self.device, torch.float32)
-            nb_sample_latent = self.latent_train_buff["s"].shape[0]
-            idx_s = torch.randint_like(torch.zeros([nb_samples]), high=nb_sample_latent, dtype=torch.int32)
-            eps_s = self.latent_train_buff["s"][idx_s].to(self.device)
-            z_t = torch.stack(nb_samples*[self.latent_train_buff["t"][pos]]).to(self.device)
+            nb_sample_latent = z_s.shape[0]
+            assert nb_samples <= nb_sample_latent, "Too much points"
 
-            assert z_t.device == eps_s.device, "z_s, z_t have to be on the same device"
-            z = self.model.merge_operation(eps_s, z_t)
+            idx_s = torch.randint_like(torch.zeros([nb_samples]), high=nb_sample_latent, dtype=torch.int32)
+            eps_s = z_s[idx_s].to(self.device)
+            eps_t = torch.stack(nb_samples*[z_t[pos]]).to(self.device)
+
+            assert eps_t.device == eps_s.device, "eps_s, eps_t have to be on the same device"
+            z = self.model.merge_operation(eps_s, eps_t)
         else : raise ValueError("cond has to be equal to either s or t")
 
         x_hat_logits = self.model.decoder(z)
@@ -152,7 +164,7 @@ class MultiDistillMeModule(LightningModule) :
         plt.show()
         return mus_logvars_s, mus_logvars_t, images_gen, z_s, z_t, z
 
-    def forward(self, images: torch.Tensor, test=False) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, images: torch.Tensor, test=False) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor], torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z = self.model(images)
 
         return mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z
@@ -169,33 +181,43 @@ class MultiDistillMeModule(LightningModule) :
         weighted_kl_s = self.hparams.kl_weight*self.hparams.beta_s*kl(*mus_logvars_s)
         weighted_kl_t = self.hparams.kl_weight*self.hparams.beta_t*kl(*mus_logvars_t)
         reco = mse(image_hat_logits, images)
-        #cov = decorrelate_params(*mus_logvars_s, *mus_logvars_t, l_var=0)/(self.hparams.latent_dim_s*self.hparams.latent_dim_t)
-        nce = self.constrastive(z_t, labels)
-
+        cov = self.hparams.l_cov*decorrelate_params(*mus_logvars_s, *mus_logvars_t)
+        nce = self.hparams.l_nce*self.constrastive(z_t, labels)
         
         if log_components :
-            self.log("loss/kl_s", weighted_kl_s)
-            self.log("loss/kl_t", weighted_kl_t)
-            self.log("loss/reco", reco)
-            #self.log("loss/cov", cov)
-            self.log("loss/nce", nce)
+            self.log("loss/kl_s", weighted_kl_s.detach())
+            self.log("loss/kl_t", weighted_kl_t.detach())
+            self.log("loss/reco", reco.detach())
+            self.log("loss/cov", cov.detach())
+            self.log("loss/nce", nce.detach())
 
-        #loss_value = weighted_kl_t+weighted_kl_s+reco+self.hparams.l_cov*cov+self.hparams.l_nce*nce
-        #loss_value = weighted_kl_t+weighted_kl_s+reco
-        loss_value = weighted_kl_t+weighted_kl_s+reco+self.hparams.l_nce*nce
+        if self.hparams.type == "all" : 
+            if self.hparams.warm_up and self.current_epoch <= int(0.1*self.trainer.max_epochs) :
+                loss_value = weighted_kl_t+weighted_kl_s+reco+nce
+            else : loss_value = weighted_kl_t+weighted_kl_s+reco+cov+nce
+        elif self.hparams.type == "vae" : loss_value = weighted_kl_t+weighted_kl_s+reco
+        elif self.hparams.type == "vae_nce" : loss_value = weighted_kl_t+weighted_kl_s+reco+nce
+        elif self.hparams.type == "vae_cov" : loss_value = weighted_kl_t+weighted_kl_s+reco+cov
+        elif self.hparams.type == "reco" : loss_value = reco
+        elif self.hparams.type == "kl" : loss_value =  weighted_kl_t+weighted_kl_s
+        elif self.hparams.type == "cov" : loss_value = cov
+        elif self.hparams.type == "nce" : loss_value = nce
+        else : raise ValueError("Loss type error")
+
+        
         return loss_value
     
     def training_step(self, batch: tuple[torch.Tensor]) :
         images, labels = batch
-
+        
         mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z = self.forward(images)
         loss = self.loss(mus_logvars_s, mus_logvars_t, image_hat_logits, images, z_s, z_t, 
-                         labels=labels[:, 0], log_components=True)
-
-        print(f"Train loss: {loss}")
+                         labels=labels[:, self.hparams.select_factor], log_components=True)
         
         if torch.isnan(loss):
-            raise ValueError("NaN loss")
+            #raise ValueError("NaN loss")
+            try : loss = self.prev_loss
+            except : ValueError("Nan loss")
 
         self.log("loss/train", loss)
 
@@ -205,13 +227,15 @@ class MultiDistillMeModule(LightningModule) :
             self.labels_train_buff.append(labels.detach().cpu())
 
         self.current_batch += 1
+
         return loss
 
     def validation_step(self, batch: tuple[torch.Tensor]):
         images, labels = batch
         mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z = self.forward(images)
         loss = self.loss(mus_logvars_s, mus_logvars_t, image_hat_logits, images, z_s, z_t, labels=labels[:, 0])
-
+        if torch.isnan(loss):
+            raise ValueError("NaN loss")
         self.log("loss/val", loss)
         print(f"Val loss: {loss}")
     
@@ -229,6 +253,13 @@ class MultiDistillMeModule(LightningModule) :
         self.log("loss/test", reco+weighted_kl_t+weighted_kl_s, sync_dist=True)
 
         if self.images_test_buff is None : self.images_test_buff = images
+
+
+    def on_train_epoch_start(self):
+        self.images_train_buff = []
+        self.labels_train_buff = []
+        self.latent_train_buff = {"s" : [], "t": []}
+        self.current_batch = 0
 
     def on_train_epoch_end(self):
         epoch = self.current_epoch
@@ -256,11 +287,6 @@ class MultiDistillMeModule(LightningModule) :
 
             ### latent space
             self.log_latent()
-
-        self.images_train_buff = []
-        self.labels_train_buff = []
-        self.latent_train_buff = {"s" : [], "t": []}
-        self.current_batch = 0
 
     def on_test_end(self):
         images_gen = self.generate()
@@ -315,7 +341,7 @@ class MultiDistillMeModule(LightningModule) :
                         )
         final_gen_s.save(join(self.logger.log_dir, "final_gen_s.png"))
         final_gen_t.save(join(self.logger.log_dir, "final_gen_t.png"))
-        final_image = merge_images(save_gen_path, "final_gen_s.png", "final_gen_t.png")
+        final_image = merge_images(save_gen_path, join(self.logger.log_dir, "final_gen_s.png"), join(self.logger.log_dir, "final_gen_t.png"))
         save_gen_all_path = join(self.logger.log_dir, f"epoch_{epoch}", f"gen_all_{epoch}.png")
         final_image.save(save_gen_all_path)
 
@@ -327,7 +353,7 @@ class MultiDistillMeModule(LightningModule) :
 
     def log_latent(self) :
         self.labels_train_buff = torch.cat(self.labels_train_buff)
-        labels = self.labels_train_buff[:, 0].unsqueeze(1)
+        labels = self.labels_train_buff[:, self.hparams.select_factor].unsqueeze(1)
         z_s_path = join(self.logger.log_dir, "z_s.png")
         z_t_path = join(self.logger.log_dir, "z_t.png")
 

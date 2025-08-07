@@ -15,9 +15,9 @@ class Shapes3D :
     @dataclass
     class Path :
         H5 = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/3dshapes.h5")
-        TRAIN = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/shapes3d_train.pt")
-        VAL = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/shapes3d_val.pt")
-        TEST = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/shapes3d_test.pt")
+        TRAIN = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/shapes3d_train.npz")
+        VAL = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/shapes3d_val.npz")
+        TEST = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/shapes3d_test.npz")
         NPZ = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/split_3dshapes.npz")
         VAE = join(LOG_DIR, "vae/shapes/")
     @dataclass

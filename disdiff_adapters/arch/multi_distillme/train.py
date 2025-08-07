@@ -4,6 +4,7 @@ from lightning import LightningModule
 import matplotlib.pyplot as plt
 import sys
 import os
+from os.path import join
 
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -62,7 +63,6 @@ def parse_args() -> argparse.Namespace:
         help="beta used",
         default=1.0,
     )    
-
     
     parser.add_argument(
         "--latent_dim_s",
@@ -106,10 +106,24 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--factor",
+        type=int,
+        default=0,
+        help="Choose a factor to encode"
+    )
+
+    parser.add_argument(
         "--arch",
         type=str,
         default="def",
         help="Name of the architecture"
+    )
+
+    parser.add_argument(
+        "--loss_type",
+        type=str,
+        default="all",
+        help="select loss type"
     )
 
     parser.add_argument(
@@ -151,8 +165,6 @@ def parse_args() -> argparse.Namespace:
 
 def main(flags: argparse.Namespace) :
 
-
-
     torch.set_float32_matmul_precision('medium')
     warm_up = True if flags.warm_up == "True" else False
 
@@ -171,6 +183,7 @@ def main(flags: argparse.Namespace) :
             in_channels = 3
             img_size = 64
             klw = 0.000001
+            #klw = flags.batch_size/(3*1e5)
         
         case "celeba":
             data_module = CelebADataModule(batch_size=flags.batch_size)
@@ -180,23 +193,25 @@ def main(flags: argparse.Namespace) :
         case _ :
             raise ValueError("Error flags.dataset")
 
-    print("\nVAE module\n") 
+    print("\nVAE module\n")
     model = MultiDistillMeModule(in_channels = in_channels,
                 img_size=img_size,
                 latent_dim_s=flags.latent_dim_s, 
                 latent_dim_t=flags.latent_dim_t,
+                select_factor=flags.factor,
                 res_block=res_block,
                 beta_s=flags.beta_s,
                 beta_t=flags.beta_t,
                 warm_up=warm_up,
                 kl_weight=klw,
+                type=flags.loss_type,
                 l_cov=flags.l_cov,
                 l_nce=flags.l_nce,
                 l_anti_nce=flags.l_anti_nce,)
     
     model_name = "md"
     
-    version=f"{model_name}_epoch={flags.max_epochs}_beta={(flags.beta_s, flags.beta_t)}_latent={(flags.latent_dim_t, flags.latent_dim_s)}_batch={flags.batch_size}_warm_up={warm_up}_lr={flags.lr}_arch={flags.arch}+l_cov={flags.l_cov}+l_nce={flags.l_nce}+l_anti_nce={flags.l_anti_nce}" 
+    version=f"{model_name}_epoch={flags.max_epochs}_beta={(flags.beta_s, flags.beta_t)}_latent={(flags.latent_dim_s, flags.latent_dim_t)}_batch={flags.batch_size}_warm_up={warm_up}_lr={flags.lr}_arch={flags.arch}+l_cov={flags.l_cov}+l_nce={flags.l_nce}+l_anti_nce={flags.l_anti_nce}" 
     print(f"\nVERSION : {version}\n")
 
     trainer = Trainer(
@@ -208,7 +223,7 @@ def main(flags: argparse.Namespace) :
 
             logger=TensorBoardLogger(
                 save_dir=LOG_DIR+f"/{model_name}",
-                name=flags.dataset+"/"+flags.experience,
+                name=join(flags.dataset, f"loss_{flags.loss_type}", flags.experience),
                 version=version,
                 default_hp_metric=False,
             ),

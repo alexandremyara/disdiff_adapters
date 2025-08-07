@@ -35,46 +35,45 @@ class Shapes3DDataModule(LightningDataModule) :
                 train_images, train_labels, test_images, test_labels = split(images, labels)
                 train_images, train_labels, val_images, val_labels = split(train_images, train_labels)
             else :
-                print("npz file loading.")
                 data = np.load(Shapes3D.Path.NPZ)
                 train_images = data["train_images.npy"]
-                train_images = torch.from_numpy(train_images)
-
                 train_labels = data["train_labels.npy"]
-                train_labels = torch.from_numpy(train_labels)
-
                 test_images = data["test_images.npy"]
-                test_images = torch.from_numpy(test_images)
-
                 test_labels = data["test_labels.npy"]
-                test_labels = torch.from_numpy(test_labels)
 
                 train_images, train_labels, val_images, val_labels = split(train_images, train_labels)
 
-            train_images = (train_images.permute(0,3,1,2)/255).to(torch.float32)
-            val_images = (val_images.permute(0,3,1,2)/255).to(torch.float32)    
-            test_images = (test_images.permute(0,3,1,2)/255).to(torch.float32)
-
-            print("save tensors\n")
-            torch.save((train_images, train_labels), self.train_path)
-            torch.save((val_images, val_labels), self.val_path)
-            torch.save((test_images, test_labels), self.test_path)
-            print("tensors saved.")
+            np.savez(self.train_path, images=train_images, labels=train_labels)
+            np.savez(self.val_path, images=val_images, labels=val_labels)
+            np.savez(self.test_path, images=test_images, labels=test_labels)
 
         else : pass
 
     def setup(self, stage: str|None) :
+        #data = np.load(Shapes3D.Path.NPZ)
         if stage in ("fit", None) :
-            print("loading of tensors - train")
-            train_images, train_labels = torch.load(self.train_path)
-            print("loading of tensors - val")
-            val_images, val_labels = torch.load(self.val_path)
+            train_images, train_labels = np.load(self.train_path)["images"],np.load(self.train_path)["labels"]
+            val_images, val_labels = np.load(self.val_path)["images"],np.load(self.val_path)["labels"]
+            #train_labels = data["train_labels.npy"]
+
+            #train_images, train_labels, val_images, val_labels = split(train_images, train_labels)
+
+            # print("loading of tensors - train")
+            # train_images, train_labels = torch.load(self.train_path)
+            # print("loading of tensors - val")
+            # val_images, val_labels = torch.load(self.val_path)
+
             print("load dataset - train")
             self.train_dataset = Shapes3DDataset(train_images, train_labels)
             print("load dataset val")
             self.val_dataset = Shapes3DDataset(val_images, val_labels)
         else :
-            test_images, test_labels = torch.load(self.test_path)
+
+            #test_images = data["test_images.npy"]
+            #test_labels = data["test_labels.npy"]
+
+            #test_images, test_labels = torch.load(self.test_path)
+            test_images, test_labels = np.load(self.test_path)["images"], np.load(self.test_path)["labels"]
             self.test_dataset = Shapes3DDataset(test_images, test_labels)
         print("tensors loaded.")
         self.set_dataloader(self.loader)

@@ -76,7 +76,7 @@ class Encoder(nn.Module):
         if is_vae:
             self.fc = nn.Sequential(nn.Flatten(),nn.Linear(self.flattened_size, latent_dim * 2))
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor :
         x = self.features(x)
         if self.is_vae :
             x = self.fc(x)
@@ -153,7 +153,7 @@ class Decoder(nn.Module):
         x = self.net(x)
         if not (self.img_size > 0 and (self.img_size & (self.img_size - 1))) == 0 : 
 
-            x = F.interpolate(x, 
+            x: torch.Tensor = F.interpolate(x, 
                               size=(self.img_size, self.img_size), 
                               mode='bilinear', 
                               align_corners=False) #Padding

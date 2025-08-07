@@ -90,6 +90,7 @@ def display(batch: tuple[torch.Tensor]) :
         
         ax.imshow(img.permute(1,2,0).numpy())
         ax.set_title(f"{labels[i].numpy()}")
+    plt.show()
 
 def sample_from(mu_logvar: tuple[torch.Tensor], test=False) -> torch.Tensor :
     mu, logvar = mu_logvar
@@ -97,6 +98,16 @@ def sample_from(mu_logvar: tuple[torch.Tensor], test=False) -> torch.Tensor :
     
     if test: return mu
     else : return mu + torch.exp(0.5 * logvar) * eps
+
+
+def del_outliers(arr: np.ndarray, k: int) -> np.ndarray:
+
+    assert type(arr) == np.ndarray, "should be an array"
+    assert k<=len(arr), "k>len(arr)"
+    assert len(arr.shape) == 1, "error shape"
+    idxs = np.argpartition(arr, -k)[-k:]
+    arr[idxs] = 0
+    return arr
 
 def display_latent(labels: torch.Tensor, 
                mu_logvars: None|tuple[torch.Tensor]=None,
@@ -143,10 +154,15 @@ def display_latent(labels: torch.Tensor,
             
         if z.shape[1] == 1 : pts_y = torch.zeros_like(pts[:, 0])
         else : pts_y = pts[:, 1]
-        plt.scatter(pts[:, 0], pts_y,
+        pts_x = pts[:, 0]
+
+        pts_x= del_outliers(arr=pts_x, k=5)
+        pts_y = del_outliers(arr=pts_y, k=5)
+        plt.scatter(pts_x, pts_y,
                     color=label_to_color[label], label=label, alpha=0.3)
         plt.xlabel(f"{explained_axis[0]}")
         plt.ylabel(f"{explained_axis[1]}")
+
 
         plt.legend()
     plt.title(title+f" explained : {explained}")

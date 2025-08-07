@@ -3,16 +3,16 @@
 cd /projects/compures/alexandre/disdiff_adapters
 source /projects/compures/alexandre/.venv/bin/activate
 
-batch_size=32
-max_epochs=150
-dataset="celeba"
+batch_size=256
+max_epochs=50
+dataset="shapes"
 betas=("1 5 15")
 latent_dim=128
 warm_up="True"
 lr=0.00001
 arch="res"
 
-gpus="2"
+gpus="3"
 
 
 echo $dataset

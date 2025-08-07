@@ -13,11 +13,23 @@ def mse(x_hat_logits: torch.Tensor, x: torch.Tensor) :
     return F.mse_loss(x_hat_logits, x, reduction="mean")
 
 def cross_cov(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    a = a - a.mean(dim=0)    
-    b = b - b.mean(dim=0)
+    # a = a - a.mean(dim=0)    
+    # b = b - b.mean(dim=0)
 
-    cov = (a.T @ b) / (a.size(0)-1)       
-    return cov/(a.std()*b.std())     
+    # cov = (a.T @ b) / (a.size(0)-1)       
+    # return cov/(a.std()*b.std())     
+    n = a.shape[0]
+    X_c = a - a.mean(dim=0, keepdim=True)
+    Y_c = b - b.mean(dim=0, keepdim=True)
+
+    cov = X_c.T @ Y_c / (n - 1)
+
+    std_X = a.std(dim=0, unbiased=True).unsqueeze(1)  # [d, 1]
+    std_Y = b.std(dim=0, unbiased=True).unsqueeze(0)  # [1, p]
+
+    corr = cov / (std_X @ std_Y + 1e-8)  # [d, p]
+    return corr
+
 
 def decorrelate_params(mu_s, logvar_s, mu_t, logvar_t,):
     return torch.norm(cross_cov(mu_s, mu_t), p="fro")
@@ -38,13 +50,13 @@ class InfoNCESupervised(nn.Module) :
         z = F.normalize(z, dim=1)
 
         sim = torch.matmul(z, z.t()) / self.temperature
+        sim = torch.clamp(sim, min=-100, max=100)
 
         mask_self = torch.eye(batch_size, device=device).bool()
         sim.masked_fill_(mask_self, -1e9)
 
         labels = labels.view(-1, 1)
         mask_pos = torch.eq(labels, labels.t()) & ~mask_self  # (B, B)
-
 
         exp_sim = torch.exp(sim)
         denom = exp_sim.sum(dim=1) 

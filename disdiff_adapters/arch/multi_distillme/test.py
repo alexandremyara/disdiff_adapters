@@ -3,6 +3,7 @@ import torch
 from lightning import LightningModule
 import matplotlib.pyplot as plt
 import glob
+from os.path import join
 
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -84,6 +85,13 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--factor",
+        type=int,
+        default=0,
+        help="Choose a factor to encode"
+    )
+
+    parser.add_argument(
         "--warm_up",
         type=str,
         default="False"
@@ -94,6 +102,13 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=10e-5,
         help="learning rate."
+    )
+
+    parser.add_argument(
+        "--loss_type",
+        type=str,
+        default="all",
+        help="select loss type"
     )
 
     parser.add_argument(
@@ -190,7 +205,7 @@ def main(flags: argparse.Namespace) :
 
             logger=TensorBoardLogger(
                 save_dir=LOG_DIR+f"/{model_name}",
-                name=flags.dataset+"/"+flags.experience,
+                name=join(flags.dataset, f"loss_{flags.type_loss}", flags.experience),
                 version=version,
                 default_hp_metric=False,
             ),

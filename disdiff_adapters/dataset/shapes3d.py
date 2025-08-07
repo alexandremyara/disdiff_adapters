@@ -13,4 +13,7 @@ class Shapes3DDataset(Dataset) :
         return self.images.shape[0]
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor] :
-        return self.images[idx], self.labels[idx]
+        image = self.images[idx]
+        if type(image) != torch.Tensor : image = torch.Tensor(image)
+        processed_img = (image.permute(2,0,1)/255).to(torch.float32)
+        return processed_img, self.labels[idx]
