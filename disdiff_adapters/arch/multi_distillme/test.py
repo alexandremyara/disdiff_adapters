@@ -147,10 +147,23 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--key",
+        type=str,
+        default="",
+        help="key to add for the file"
+    )
+
+    parser.add_argument(
         "--gpus",
         type=to_list,
         default="0",
         help="comma seperated list of gpus"
+    )
+
+    parser.add_argument(
+        "--version_model",
+        type=str,
+        default="md"
     )
     return parser.parse_args()
 
@@ -189,8 +202,8 @@ def main(flags: argparse.Namespace) :
             raise ValueError("Error flags.dataset")
         
     model_name="md"
-    version=f"{model_name}_epoch={flags.max_epochs}_beta={(flags.beta_s, flags.beta_t)}_latent={(flags.latent_dim_t, flags.latent_dim_s)}_batch={flags.batch_size}_warm_up={warm_up}_lr={flags.lr}_arch={flags.arch}+l_cov={flags.l_cov}+l_nce={flags.l_nce}+l_anti_nce={flags.l_anti_nce}" 
-    ckpt_path = glob.glob(f"{LOG_DIR}/{model_name}/{flags.dataset}/{version}/checkpoints/*.ckpt")[0]
+    version=f"{model_name}_epoch={flags.max_epochs}_beta={(flags.beta_s,flags.beta_t)}_latent={(flags.latent_dim_t,flags.latent_dim_s)}_batch={flags.batch_size}_warm_up={warm_up}_lr={flags.lr}_arch={flags.arch}+l_cov={flags.l_cov}+l_nce={flags.l_nce}+l_anti_nce={flags.l_anti_nce}_{flags.key}" 
+    ckpt_path = glob.glob(f"{LOG_DIR}/{model_name}_vf/{flags.dataset}/{version}/checkpoints/*.ckpt")[0]
     model = MultiDistillMeModule.load_from_checkpoint(ckpt_path)
     
 
@@ -204,7 +217,7 @@ def main(flags: argparse.Namespace) :
             log_every_n_steps=20,
 
             logger=TensorBoardLogger(
-                save_dir=LOG_DIR+f"/{model_name}",
+                save_dir=LOG_DIR+f"/{flags.version_model}",
                 name=join(flags.dataset, f"loss_{flags.type_loss}", flags.experience),
                 version=version,
                 default_hp_metric=False,

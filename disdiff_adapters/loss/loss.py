@@ -48,20 +48,39 @@ class InfoNCESupervised(nn.Module) :
         device = z.device
         batch_size = z.size(0)
         z = F.normalize(z, dim=1)
+        assert not torch.isnan(z).any(), "In NCE, z is Nan"
 
         sim = torch.matmul(z, z.t()) / self.temperature
+        assert not torch.isnan(z).any(), "sim is Nan"
         sim = torch.clamp(sim, min=-100, max=100)
-
+        assert not torch.isnan(sim).any(), "sim clamped is Nan"
         mask_self = torch.eye(batch_size, device=device).bool()
-        sim.masked_fill_(mask_self, -1e9)
+        sim.masked_fill_(mask_self, float("-inf"))
 
         labels = labels.view(-1, 1)
         mask_pos = torch.eq(labels, labels.t()) & ~mask_self  # (B, B)
 
-        exp_sim = torch.exp(sim)
-        denom = exp_sim.sum(dim=1) 
-        numer = (exp_sim * mask_pos.float()).sum(dim=1)
+        valid = mask_pos.any(dim=1)
+        if not torch.any(valid):
+            return sim.new_tensor(0.0, requires_grad=True)
+        
+        # exp_sim = torch.exp(sim)
+        # denom = exp_sim.sum(dim=1) 
+        # numer = (exp_sim * mask_pos.float()).sum(dim=1)
 
-        loss = -torch.log((numer + self.eps) / (denom + self.eps))
+        # loss = -torch.log((numer + self.eps) / (denom + self.eps))
 
+
+        sim = sim[valid]              
+        mask_pos = mask_pos[valid]
+
+        log_denom = torch.logsumexp(sim, dim=1)  
+        assert not torch.isnan(log_denom).any(), "log_denom is nan"
+        sim_pos = sim.masked_fill(~mask_pos, float("-inf"))
+        log_numer = torch.logsumexp(sim_pos, dim=1) 
+        assert not torch.isnan(log_numer).any(), "log_numer is nan"
+
+        loss = -(log_numer - log_denom) 
         return loss.mean()
+
+        #return loss.mean()

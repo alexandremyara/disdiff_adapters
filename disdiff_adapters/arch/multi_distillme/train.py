@@ -113,10 +113,17 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--factor_value",
+        type=int,
+        default=1,
+        help="Choose a factor to encode"
+    )
+
+    parser.add_argument(
         "--arch",
         type=str,
         default="def",
-        help="Name of the architecture"
+        help="main value of the interest factor"
     )
 
     parser.add_argument(
@@ -155,16 +162,29 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--key",
+        type=str,
+        default="",
+        help="key to add for the file"
+    )
+
+    parser.add_argument(
         "--gpus",
         type=to_list,
         default="0",
         help="comma seperated list of gpus"
     )
+
+    parser.add_argument(
+        "--version_model",
+        type=str,
+        default="md"
+    )
     return parser.parse_args()
 
 
 def main(flags: argparse.Namespace) :
-
+    torch.autograd.set_detect_anomaly(True)
     torch.set_float32_matmul_precision('medium')
     warm_up = True if flags.warm_up == "True" else False
 
@@ -177,9 +197,18 @@ def main(flags: argparse.Namespace) :
             in_channels = 3
             img_size = 28
             klw = 0.0001
+        
+            
+        case "dsprites":
+            data_module = DSpritesDataModule(batch_size=flags.batch_size)
+            param_class = DSprites
+            in_channels = 1
+            img_size = 64
+            klw = 0.000001
 
         case "shapes":
             data_module = Shapes3DDataModule(batch_size=flags.batch_size)
+            param_class = Shapes3D
             in_channels = 3
             img_size = 64
             klw = 0.000001
@@ -187,18 +216,21 @@ def main(flags: argparse.Namespace) :
         
         case "celeba":
             data_module = CelebADataModule(batch_size=flags.batch_size)
+            param_class = CelebA
             in_channels = 3
             img_size = 64
             klw = 0.000001
         case _ :
             raise ValueError("Error flags.dataset")
+        
+    map_idx_labels = param_class.Params.FACTORS_IN_ORDER
 
-    print("\nVAE module\n")
     model = MultiDistillMeModule(in_channels = in_channels,
                 img_size=img_size,
                 latent_dim_s=flags.latent_dim_s, 
                 latent_dim_t=flags.latent_dim_t,
                 select_factor=flags.factor,
+                factor_value=flags.factor_value,
                 res_block=res_block,
                 beta_s=flags.beta_s,
                 beta_t=flags.beta_t,
@@ -207,11 +239,13 @@ def main(flags: argparse.Namespace) :
                 type=flags.loss_type,
                 l_cov=flags.l_cov,
                 l_nce=flags.l_nce,
-                l_anti_nce=flags.l_anti_nce,)
+                l_anti_nce=flags.l_anti_nce,
+                map_idx_labels=map_idx_labels,
+                temp=0.03)
     
     model_name = "md"
     
-    version=f"{model_name}_epoch={flags.max_epochs}_beta={(flags.beta_s, flags.beta_t)}_latent={(flags.latent_dim_s, flags.latent_dim_t)}_batch={flags.batch_size}_warm_up={warm_up}_lr={flags.lr}_arch={flags.arch}+l_cov={flags.l_cov}+l_nce={flags.l_nce}+l_anti_nce={flags.l_anti_nce}" 
+    version=f"{model_name}_epoch={flags.max_epochs}_beta=({flags.beta_s},{flags.beta_t})_latent=({flags.latent_dim_s},{flags.latent_dim_t})_batch={flags.batch_size}_warm_up={warm_up}_lr={flags.lr}_arch={flags.arch}+l_cov={flags.l_cov}+l_nce={flags.l_nce}+l_anti_nce={flags.l_anti_nce}_{flags.key}" 
     print(f"\nVERSION : {version}\n")
 
     trainer = Trainer(
@@ -222,7 +256,7 @@ def main(flags: argparse.Namespace) :
             log_every_n_steps=5,
 
             logger=TensorBoardLogger(
-                save_dir=LOG_DIR+f"/{model_name}",
+                save_dir=LOG_DIR+f"/{flags.version_model}",
                 name=join(flags.dataset, f"loss_{flags.loss_type}", flags.experience),
                 version=version,
                 default_hp_metric=False,

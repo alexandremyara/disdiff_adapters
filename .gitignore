@@ -1,4 +1,3 @@
-disdiff_adapters/data/*
 *.ckpt
 **/__pycache__/*
 *.pyc
@@ -14,3 +13,4 @@ disdiff_adapters/logs/*
 **/PyTorch-VAE/*
 **/notebook/*
 **/lightning_logs/*
+**/data/*

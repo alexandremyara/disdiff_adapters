@@ -3,11 +3,11 @@ import torch
 from torch import sort
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap, BoundaryNorm
 import math
 from PIL import Image, ImageDraw, ImageFont
 import seaborn as sns # type: ignore
 from disdiff_adapters.loss import *
-
 
 from sklearn.decomposition import PCA
 
@@ -58,39 +58,96 @@ def split(data: torch.Tensor, label: torch.Tensor, ratio: float=0.8) :
 
     return torch.tensor(train_data), torch.tensor(train_label), torch.tensor(test_data), torch.tensor(test_label)
 
-def display(batch: tuple[torch.Tensor]) :
+# def display(batch: tuple[torch.Tensor]) :
+#     """
+#     Display a batch of RGB images. 
+#     Batch sould be a tuple of two tensors : ([BATCH_SIZE, 3, H, W], [BATCH_SIZE, 1])
+#     batch_size is always a power of 2.
+
+#     Args:
+#     batch_size: tuple[torch.Tensor], ([BATCH_SIZE, 3, H, W], [BATCH_SIZE, 1])
+
+#     """
+
+#     nb_samples = len(batch[0]) #batch_size
+#     # nb_col = np.log2(nb_samples)
+#     # nb_row = np.log2(nb_samples)
+
+
+#     nb_col = math.ceil(math.sqrt(nb_samples))
+#     nb_row = math.ceil(nb_samples / nb_col)
+
+#     fig, axes = plt.subplots(int(nb_row), int(nb_col), figsize=(10,7))
+
+#     images, labels = batch
+
+#     for i in range(nb_samples):
+#         ax = axes[int(i//nb_row),int(i%nb_col)]
+
+#         img = images[i]
+#         img = 255*(img - img.min()) / (img.max() - img.min() + 1e-8)
+#         img = img.to(torch.uint8)
+        
+#         ax.imshow(img.permute(1,2,0).numpy())
+#         ax.set_title(f"{labels[i].numpy()}")
+#     plt.show()
+
+def display(batch: tuple[torch.Tensor]) -> None:
     """
-    Display a batch of RGB images. 
-    Batch sould be a tuple of two tensors : ([BATCH_SIZE, 3, H, W], [BATCH_SIZE, 1])
-    batch_size is always a power of 2.
-
-    Args:
-    batch_size: tuple[torch.Tensor], ([BATCH_SIZE, 3, H, W], [BATCH_SIZE, 1])
-
+    Affiche un batch d'images RGB.
+    batch = (images [B,3,H,W], labels [B,...])
     """
+    images, labels = batch
+    nb_samples = images.size(0)
 
-    nb_samples = len(batch[0]) #batch_size
-    # nb_col = np.log2(nb_samples)
-    # nb_row = np.log2(nb_samples)
-
-
+    # grille quasi carrée
     nb_col = math.ceil(math.sqrt(nb_samples))
     nb_row = math.ceil(nb_samples / nb_col)
 
-    fig, axes = plt.subplots(int(nb_row), int(nb_col), figsize=(10,7))
+    fig, axes = plt.subplots(nb_row, nb_col, figsize=(3*nb_col, 3*nb_row))
 
-    images, labels = batch
+    # Toujours 2D, quelles que soient les tailles
+    axes = np.atleast_1d(axes)             # -> array 1D si un seul axe
+    axes = np.array(axes, dtype=object).reshape(nb_row, nb_col)
 
-    for i in range(nb_samples):
-        ax = axes[int(i//nb_row),int(i%nb_col)]
+    for i in range(nb_row * nb_col):
+        r, c = divmod(i, nb_col)           
+        ax = axes[r, c]
+        if i < nb_samples:
+            img = images[i]
+            # normalisation min-max par image
+            img = (255 * (img - img.min()) / (img.max() - img.min() + 1e-8)).to(torch.uint8)
+            if img.size(0) == 3 : ax.imshow(img.permute(1, 2, 0).cpu().numpy())
+            else : ax.imshow(img[0].cpu().numpy(), cmap="gray")
+            # titre robuste (labels scalaires ou vecteurs)
+            lbl = labels[i]
+            try:
+                title = str(lbl.item())
+            except Exception:
+                title = str(lbl.detach().cpu().numpy())
+            ax.set_title(title)
+            ax.axis("off")
+        else:
+            ax.axis("off")
 
-        img = images[i]
-        img = 255*(img - img.min()) / (img.max() - img.min() + 1e-8)
-        img = img.to(torch.uint8)
-        
-        ax.imshow(img.permute(1,2,0).numpy())
-        ax.set_title(f"{labels[i].numpy()}")
+    plt.tight_layout()
     plt.show()
+
+def build_mask(labels: torch.Tensor, select_factor: int, factor_value) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    labels : [N, F] ou [N]  (valeurs -1/1 ou 0/1)
+    select_factor : colonne à filtrer si labels est 2D
+    factor_value : valeur à garder (ex: 1, 0 ou -1)
+
+    Retourne:
+      mask    : [N] bool, True si l'échantillon est gardé
+      idx_m2o : [M] long, pour un index j dans le tens. masqué, 
+                          l'original vaut idx_m2o[j]
+    """
+    col = labels[:, select_factor] if labels.ndim == 2 else labels
+    mask = (col == factor_value)                            # [N] bool
+    idx_m2o = mask.nonzero(as_tuple=True)[0].to(torch.long) # [M]
+    return mask, idx_m2o
 
 def sample_from(mu_logvar: tuple[torch.Tensor], test=False) -> torch.Tensor :
     mu, logvar = mu_logvar
@@ -113,7 +170,8 @@ def display_latent(labels: torch.Tensor,
                mu_logvars: None|tuple[torch.Tensor]=None,
                z: None|torch.Tensor=None,
                title: str="latent space", 
-               test: bool=False,) :
+               test: bool=False,
+               norm=None,) :
     """
     Generate a plot to visualize in 2D the latent space.
     Ensure that if z=None, mu_logvars is not None.
@@ -129,10 +187,18 @@ def display_latent(labels: torch.Tensor,
     pca = PCA(n_components=2)
     latent = []
 
-    unique_labels = np.unique(labels.detach().cpu().numpy())
-    colors = plt.cm.tab10.colors
+    unique_labels = labels.unique(sorted=True).detach().cpu().numpy()
+    K = len(unique_labels)
+    if K== 10 :
+        colors = ["red","orange", "yellow", "lightgreen", "green", "lightblue", "darkblue", "royalblue", "purple", "pink"]
+        cmap = ListedColormap(colors, name="mycats")
+        bounds = np.concatenate([unique_labels - 0.5, [unique_labels[-1] + 0.5]])
+        norm = BoundaryNorm(bounds, cmap.N, clip=True)
+        print("\ncmap : personalised\n")
+    elif K<10 : cmap = plt.get_cmap('tab10', K)
+    else : cmap=plt.get_cmap('tab20', K)
+        
 
-    label_to_color = {label: colors[i % len(colors)] for i, label in enumerate(unique_labels)}
     if z is None :
         z = sample_from(mu_logvars, test=test)
 
@@ -145,30 +211,24 @@ def display_latent(labels: torch.Tensor,
 
     #variance explained : if -2, no pca has been run
     explained = np.sum(explained_axis)
+    pts = latent_pca
 
-    #plot
-    for label in np.random.permutation(unique_labels):
-        idx = (labels.squeeze(0) == label)
-        idx = idx.detach().cpu()
-        pts = latent_pca[idx.squeeze(1).cpu()]
-            
-        if z.shape[1] == 1 : pts_y = torch.zeros_like(pts[:, 0])
-        else : pts_y = pts[:, 1]
-        pts_x = pts[:, 0]
+    if z.shape[1] == 1 : pts_y = np.zeros_like(pts[:, 0])
+    else : pts_y = pts[:, 1]
+    pts_x = pts[:, 0]
 
-        pts_x= del_outliers(arr=pts_x, k=5)
-        pts_y = del_outliers(arr=pts_y, k=5)
-        plt.scatter(pts_x, pts_y,
-                    color=label_to_color[label], label=label, alpha=0.3)
-        plt.xlabel(f"{explained_axis[0]}")
-        plt.ylabel(f"{explained_axis[1]}")
+    pts_x= del_outliers(arr=pts_x, k=5)
+    pts_y = del_outliers(arr=pts_y, k=5)
+    
+    plt.scatter(pts_x, pts_y, c=labels.squeeze(1), cmap=cmap, alpha=0.4, norm=norm)
+    plt.xlabel(f"{explained_axis[0]}")
+    plt.ylabel(f"{explained_axis[1]}")
+    #cbar = plt.colorbar(sc, ticks=unique_labels)
+    #cbar.ax.set_yticklabels([f'class {int(c)}' for c in unique_labels])
 
-
-        plt.legend()
-    plt.title(title+f" explained : {explained}")
+    plt.title(title+f"-explained : {explained}")
     plt.grid()
     plt.show()
-
     
 
 def set_device(pref_gpu: int=0) -> str :
@@ -257,6 +317,44 @@ def merge_images_with_black_gap(image_paths, gap=10):
     return merged
 
 
+def grid_merge(image_paths, out_path, cols=3, padding=10, bg=(0,0,0), resize_to=None):
+    """
+    Merge 6 images en une grille 2x3 (ou plus généralement rows x cols).
+    - image_paths: liste de 6 chemins d’images.
+    - cols: nb de colonnes (3 pour ton cas).
+    - padding: espace en pixels entre les images.
+    - bg: couleur de fond (R,G,B).
+    - resize_to: (W,H) optionnel pour forcer une taille identique avant collage.
+    """
+    assert len(image_paths) > 0
+    imgs = [Image.open(p).convert("RGB") for p in image_paths]
+
+    # Option : harmoniser les tailles
+    if resize_to is not None:
+        imgs = [im.resize(resize_to, Image.BICUBIC) for im in imgs]
+    else:
+        # par défaut on prend la taille de la plus petite (évite les débords)
+        w = min(im.width for im in imgs)
+        h = min(im.height for im in imgs)
+        imgs = [im.resize((w, h), Image.BICUBIC) for im in imgs]
+
+    w, h = imgs[0].size
+    rows = math.ceil(len(imgs) / cols)
+
+    W = cols * w + (cols - 1) * padding
+    H = rows * h + (rows - 1) * padding
+    canvas = Image.new("RGB", (W, H), bg)
+
+    for i, im in enumerate(imgs):
+        r, c = divmod(i, cols)
+        x = c * (w + padding)
+        y = r * (h + padding)
+        canvas.paste(im, (x, y))
+
+    canvas.save(out_path)
+    return canvas
+
+
 def log_cross_cov_heatmap(mu_s, logvar_s, mu_t, logvar_t, save_path: str, interactive: bool=False):
     cov_mu = cross_cov(mu_s, mu_t).detach().cpu().numpy()
     assert cov_mu.shape == (mu_s.shape[1], mu_t.shape[1]), "ERROR COV MATRIX SHAPE"
@@ -274,3 +372,20 @@ def log_cross_cov_heatmap(mu_s, logvar_s, mu_t, logvar_t, save_path: str, intera
     if interactive : plt.show()
     plt.savefig(save_path, bbox_inches='tight')
     plt.close(fig)
+
+
+
+def report_nonfinite(**named_tensors):
+    problems = []
+    for name, t in named_tensors.items():
+        if not torch.is_tensor(t): 
+            continue
+        mask = ~torch.isfinite(t)
+        if mask.any():
+            n_nan = torch.isnan(t).sum().item()
+            n_inf = torch.isinf(t).sum().item()
+            # premiers indices problématiques (max 5)
+            ex = mask.nonzero(as_tuple=False)[:5].tolist()
+            problems.append(f"- {name}: NaN={n_nan}, Inf={n_inf}, ex_idx={ex}")
+    if problems:
+        raise RuntimeError("Non-finite detected:\n" + "\n".join(problems))

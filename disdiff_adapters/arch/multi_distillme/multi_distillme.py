@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import os
 import math
 from os.path import join
+import shutil
 import torchvision.utils as vutils
 from PIL import Image
 import numpy as np
@@ -76,7 +77,10 @@ class MultiDistillMeModule(LightningModule) :
                  type: str="all",
                  l_cov: float=0.0,
                  l_nce: float=1e-3,
-                 l_anti_nce: float=0.0,) :
+                 l_anti_nce: float=0.0,
+                 temp: float=0.07,
+                 factor_value: int = -1,
+                 map_idx_labels: list|None= None) :
         
         super().__init__()
         self.save_hyperparameters()
@@ -92,7 +96,7 @@ class MultiDistillMeModule(LightningModule) :
         self.labels_train_buff = []
         self.latent_train_buff:dict[str, torch.Tensor] = {"s" : [], "t": []}
 
-        self.constrastive = InfoNCESupervised()
+        self.constrastive = InfoNCESupervised(temperature=self.hparams.temp)
         self.current_batch = 0
 
     def configure_optimizers(self):
@@ -108,39 +112,60 @@ class MultiDistillMeModule(LightningModule) :
         x_hat_logits = self.model.decoder(z)
         return x_hat_logits
 
-    def generate_cond(self, nb_samples: int=16, cond: str="t", pos: int=0, z_t=None, z_s=None) :
+    def generate_cond(self, nb_samples: int=16, cond: str="t", pos: int=0, 
+                      z_t=None, z_s=None, img_ref=None, factor_value=-1) :
+        #Test cond validity and if z_t/z_s are specified properly
+        if not isinstance(cond, str) or cond.lower() not in {"s", "t"}:
+            raise ValueError(f"cond must be 's' or 't', got {cond!r}")
         assert (z_t is None) == (z_s is None), "You must specified z_s and z_t, or none of them"
+
+        #When z_t/z_s are not specified, we use the buffer
         if z_t is None : 
             z_t= self.latent_train_buff["t"]
             z_s = self.latent_train_buff["s"]
-        else : print("interactive mode : on")
+        else : print("interactive mode : on") #If z_t/z_s are specified, mode is not auto
+
+        #If a factor_value should be represented, we mask the latent space to select the correct value
+        if factor_value != -1 :
+            mask = (self.labels_train_buff[:, self.hparams.select_factor] == factor_value)
+            if cond == "s" : z_t = z_t[mask]
+            else : z_s = z_s[mask]
+        else : mask = torch.ones(z_t.size(0), dtype=bool)
 
         if cond == "t" :
-            #eps_t = torch.randn_like(torch.zeros([nb_samples, self.hparams.latent_dim_t])).to(self.device, torch.float32)
             nb_sample_latent = z_t.shape[0]
             assert nb_samples <= nb_sample_latent, "Too much points"
 
             idx_t = torch.randint_like(torch.zeros([nb_samples]), high=nb_sample_latent, dtype=torch.int32)
             eps_t = z_t[idx_t].to(self.device)
-            eps_s = torch.stack(nb_samples*[z_s[pos]]).to(self.device)
+
+            if img_ref is None :
+                eps_s = torch.stack(nb_samples*[z_s[pos]]).to(self.device)
+            else : 
+                with torch.no_grad() : _, _, _, eps_s, _, _ = self(img_ref.to(self.device), test=True)
+                eps_s = torch.cat(nb_samples*[eps_s]).to(self.device)
 
             assert eps_s.device == eps_t.device, "eps_s, eps_t have to be on the same device"
             z = self.model.merge_operation(eps_s, eps_t)
-        elif cond == "s" :
-            #eps_s = torch.randn_like(torch.zeros([nb_samples, self.hparams.latent_dim_s])).to(self.device, torch.float32)
-            nb_sample_latent = z_s.shape[0]
-            assert nb_samples <= nb_sample_latent, "Too much points"
+
+        else :
+            nb_sample_latent = z_s.shape[0] 
+            assert nb_samples <= nb_sample_latent, "Too much points" 
 
             idx_s = torch.randint_like(torch.zeros([nb_samples]), high=nb_sample_latent, dtype=torch.int32)
             eps_s = z_s[idx_s].to(self.device)
-            eps_t = torch.stack(nb_samples*[z_t[pos]]).to(self.device)
 
+            if img_ref is None :
+                eps_t = torch.stack(nb_samples*[z_t[pos]]).to(self.device)
+            else : 
+                with torch.no_grad() : _, _, _, _, eps_t, _ = self(img_ref.to(self.device), test=True)
+                eps_t = torch.cat(nb_samples*[eps_t]).to(self.device)
             assert eps_t.device == eps_s.device, "eps_s, eps_t have to be on the same device"
             z = self.model.merge_operation(eps_s, eps_t)
-        else : raise ValueError("cond has to be equal to either s or t")
 
         x_hat_logits = self.model.decoder(z)
-        return x_hat_logits
+        ref_img = img_ref if img_ref is not None else self.images_train_buff[mask][pos]
+        return x_hat_logits.detach().cpu(), ref_img.unsqueeze(0).detach().cpu()
 
     def show_reconstruct(self, images: torch.Tensor) :
         images = images.to(self.device)[:8]
@@ -152,8 +177,8 @@ class MultiDistillMeModule(LightningModule) :
             img = images[i]
             img_gen = images_gen[i]
 
-            images_proc = (255*((img - img.min()) / (img.max() - img.min() + 1e-8))).to("cpu",torch.uint8).permute(1,2,0).detach().numpy()
-            images_gen_proc = (255*((img_gen - img_gen.min()) / (img_gen.max() - img_gen.min() + 1e-8))).to("cpu",torch.uint8).permute(1,2,0).detach().numpy()
+            images_proc = (255*((img - img.min()) / (img.max() - img.min() + 1e-8))).to("cpu",torch.uint8).permute(1,2,0).detach().cpu().numpy()
+            images_gen_proc = (255*((img_gen - img_gen.min()) / (img_gen.max() - img_gen.min() + 1e-8))).to("cpu",torch.uint8).permute(1,2,0).detach().cpu().numpy()
 
             axes[i,0].imshow(images_proc)
             axes[i,1].imshow(images_gen_proc)
@@ -178,11 +203,36 @@ class MultiDistillMeModule(LightningModule) :
              labels=None, 
              log_components: bool=False) :
 
+        mu_t, logvar_t = mus_logvars_t
+        mu_s, logvar_s = mus_logvars_s
+        report_nonfinite(mu_t=mu_t, 
+                         logvar_t=logvar_t, 
+                         mu_s=mu_s,
+                         logvar_s=logvar_s,
+                         image_hat_logits=image_hat_logits, 
+                         images=images, 
+                         z_s=z_s,
+                         z_t=z_t,
+                         labels=labels)
+        # assert not torch.isnan(mus_logvars_t[0]).any(), "mu_s is nan"
+        # assert not torch.isnan(mus_logvars_t[1]).any(), "sigma_s is nan"
+        # assert not torch.isnan(z_t).any(), "z_t is nan"
+        # assert not torch.isnan(mus_logvars_t[0]).any(), "mu_s is nan"
+        # assert not torch.isnan(mus_logvars_t[1]).any(), "sigma_s is nan"
+        # assert not torch.isnan(image_hat_logits).any(), "image_hat_logits is nan"
+        
+
+
         weighted_kl_s = self.hparams.kl_weight*self.hparams.beta_s*kl(*mus_logvars_s)
+        assert not torch.isnan(weighted_kl_s).any(), "kl_s is Nan"
         weighted_kl_t = self.hparams.kl_weight*self.hparams.beta_t*kl(*mus_logvars_t)
+        assert not torch.isnan(weighted_kl_t).any(), "kl_t is Nan"
         reco = mse(image_hat_logits, images)
+        assert not torch.isnan(reco).any(), "reco is Nan"
         cov = self.hparams.l_cov*decorrelate_params(*mus_logvars_s, *mus_logvars_t)
+        assert not torch.isnan(cov).any(), "cov is Nan"
         nce = self.hparams.l_nce*self.constrastive(z_t, labels)
+        assert not torch.isnan(nce).any(), "nce is Nan"
         
         if log_components :
             self.log("loss/kl_s", weighted_kl_s.detach())
@@ -204,7 +254,6 @@ class MultiDistillMeModule(LightningModule) :
         elif self.hparams.type == "nce" : loss_value = nce
         else : raise ValueError("Loss type error")
 
-        
         return loss_value
     
     def training_step(self, batch: tuple[torch.Tensor]) :
@@ -215,12 +264,9 @@ class MultiDistillMeModule(LightningModule) :
                          labels=labels[:, self.hparams.select_factor], log_components=True)
         
         if torch.isnan(loss):
-            #raise ValueError("NaN loss")
-            try : loss = self.prev_loss
-            except : ValueError("Nan loss")
+            raise ValueError("NaN loss")
 
         self.log("loss/train", loss)
-
 
         if self.current_batch <= 700 :
             self.images_train_buff.append(images.detach().cpu())
@@ -254,7 +300,6 @@ class MultiDistillMeModule(LightningModule) :
 
         if self.images_test_buff is None : self.images_test_buff = images
 
-
     def on_train_epoch_start(self):
         self.images_train_buff = []
         self.labels_train_buff = []
@@ -276,17 +321,48 @@ class MultiDistillMeModule(LightningModule) :
                 self.latent_train_buff["t"].append(z_t.detach().cpu())
             self.latent_train_buff["s"] = torch.cat(self.latent_train_buff["s"])
             self.latent_train_buff["t"] = torch.cat(self.latent_train_buff["t"])
-            self.images_train_buff = torch.cat(self.images_train_buff)
 
+            self.images_train_buff = torch.cat(self.images_train_buff)
+            self.labels_train_buff = torch.cat(self.labels_train_buff)
             mus_logvars_s, mus_logvars_t = self.log_reco()
 
             self.log_gen_images()
 
-            path_heatmap = os.path.join(self.logger.log_dir, f"epoch_{epoch}", f"cov_{epoch}.png")
+            path_heatmap = join(self.logger.log_dir, f"epoch_{epoch}", f"cov_{epoch}.png")
             log_cross_cov_heatmap(*mus_logvars_s, *mus_logvars_t, save_path=path_heatmap)
 
             ### latent space
             self.log_latent()
+
+    def reload_latent(self):
+        self.on_train_epoch_start()
+        self.images_train_buff = torch.load(Shapes3D.Path.BUFF_IMG)
+        self.labels_train_buff = torch.load(Shapes3D.Path.BUFF_LABELS)
+
+        if type(self.images_train_buff) == list : self.images_train_buff = torch.cat(self.images_train_buff)
+        if type(self.labels_train_buff) == list : self.labels_train_buff = torch.cat(self.labels_train_buff)
+        
+        pill = []
+        for images in self.images_train_buff :
+            if len(pill) < 4096 : pill.append(images)
+            else : 
+                pill.append(images)
+                images_batched = torch.stack(pill)
+                print(images_batched.shape)
+                with torch.no_grad() : _, _, _, z_s, z_t, z = self.forward(images_batched.to(self.device), test=True) #images shape : [32, 3, 64, 64]
+                pill = []
+                self.latent_train_buff["s"].append(z_s.detach().cpu())
+                self.latent_train_buff["t"].append(z_t.detach().cpu())
+
+        images_batched = torch.stack(pill)
+        print(images_batched.shape)
+        with torch.no_grad() : _, _, _, z_s, z_t, z = self.forward(images_batched.to(self.device), test=True) #images shape : [32, 3, 64, 64]
+        pill = []
+        self.latent_train_buff["s"].append(z_s.detach().cpu())
+        self.latent_train_buff["t"].append(z_t.detach().cpu())
+
+        self.latent_train_buff["s"] = torch.cat(self.latent_train_buff["s"])
+        self.latent_train_buff["t"] = torch.cat(self.latent_train_buff["t"])
 
     def on_test_end(self):
         images_gen = self.generate()
@@ -320,15 +396,17 @@ class MultiDistillMeModule(LightningModule) :
             
         #save the cond generate image s
         for i in range(4) :
-            images_cond_s_gen = self.generate_cond(cond="s", pos=i)
-            images_cond_s_gen_ref = torch.cat([images_cond_s_gen.detach().cpu(), self.images_train_buff[i].unsqueeze(0).detach().cpu()])
+            factor_value = self.hparams.factor_value if i%2 else -1
+            images_cond_s_gen, input_t = self.generate_cond(cond="s", pos=i, factor_value=factor_value)
+            images_cond_s_gen_ref = torch.cat([images_cond_s_gen.detach().cpu(), input_t])
             save_gen_s_path = join(self.logger.log_dir, f"epoch_{epoch}", f"gen_s_{epoch}_{i}.png")
             vutils.save_image(images_cond_s_gen_ref, save_gen_s_path)
 
         #save the cond generate image t
         for i in range(4) :
-            images_cond_t_gen = self.generate_cond(cond="t", pos=i)
-            images_cond_t_gen_ref = torch.cat([images_cond_t_gen.detach().cpu(), self.images_train_buff[i].unsqueeze(0).detach().cpu()])
+            factor_value = self.hparams.factor_value if i%2 else -1
+            images_cond_t_gen, input_s = self.generate_cond(cond="t", pos=i, factor_value=factor_value)
+            images_cond_t_gen_ref = torch.cat([images_cond_t_gen.detach().cpu(), input_s])
             save_gen_t_path = join(self.logger.log_dir, f"epoch_{epoch}", f"gen_t_{epoch}_{i}.png")
             vutils.save_image(images_cond_t_gen_ref.detach().cpu(), save_gen_t_path)
 
@@ -352,21 +430,27 @@ class MultiDistillMeModule(LightningModule) :
             os.remove(join(self.logger.log_dir, f"epoch_{epoch}", f"gen_t_{epoch}_{i}.png"))
 
     def log_latent(self) :
-        self.labels_train_buff = torch.cat(self.labels_train_buff)
-        labels = self.labels_train_buff[:, self.hparams.select_factor].unsqueeze(1)
-        z_s_path = join(self.logger.log_dir, "z_s.png")
-        z_t_path = join(self.logger.log_dir, "z_t.png")
+        number_labels = self.labels_train_buff.shape[1]
+        
+        for i in range(number_labels) :
+            labels = self.labels_train_buff[:, i].unsqueeze(1)
+            z_s_path = join(self.logger.log_dir, "z_s.png")
+            z_t_path = join(self.logger.log_dir, "z_t.png")
+            title = f"latent space {i}" if self.hparams.map_idx_labels is None else self.hparams.map_idx_labels[i]
 
-        display_latent(labels=labels, z=self.latent_train_buff["s"])
-        fig = plt.gcf()
-        fig.savefig(z_s_path)
-        plt.close(fig)
+            display_latent(labels=labels, z=self.latent_train_buff["s"], title=title)
+            fig = plt.gcf()
+            fig.savefig(z_s_path)
+            plt.close(fig)
 
-        display_latent(labels=labels, z=self.latent_train_buff["t"])
-        fig = plt.gcf()
-        fig.savefig(z_t_path)
-        plt.close(fig)
-        latent_img = merge_images_with_black_gap([z_s_path, z_t_path])
-        latent_img.save(os.path.join(self.logger.log_dir, f"epoch_{self.current_epoch}", f"latent_space_{self.current_epoch}.png"))
-        os.remove(z_s_path)
-        os.remove(z_t_path)
+            display_latent(labels=labels, z=self.latent_train_buff["t"], title=title)
+            fig = plt.gcf()
+            fig.savefig(z_t_path)
+            plt.close(fig)
+            latent_img = merge_images_with_black_gap([z_s_path, z_t_path])
+            latent_img.save(join(self.logger.log_dir, f"epoch_{self.current_epoch}", f"latent_space_{i}_{self.current_epoch}.png"))
+            os.remove(z_s_path)
+            os.remove(z_t_path)
+
+        grid_merge([join(self.logger.log_dir, f"epoch_{self.current_epoch}", f"latent_space_{i}_{self.current_epoch}.png") for i in range(number_labels)], join(self.logger.log_dir, f"epoch_{self.current_epoch}", f"latent_space_{self.current_epoch}.png"))
+        for i in range(number_labels) : os.remove(join(self.logger.log_dir, f"epoch_{self.current_epoch}", f"latent_space_{i}_{self.current_epoch}.png"))

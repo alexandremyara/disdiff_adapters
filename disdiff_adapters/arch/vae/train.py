@@ -96,15 +96,19 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--key",
+        type=str,
+        default="",
+        help="key to add for the file"
+    )
+
+    parser.add_argument(
         "--gpus",
         type=to_list,
         default="0",
         help="comma seperated list of gpus"
     )
     return parser.parse_args()
-
-
-
 
 def main(flags: argparse.Namespace) :
 
@@ -155,7 +159,7 @@ def main(flags: argparse.Namespace) :
                     latent_dim=flags.latent_dim)
         model_name = "ae"
     
-    version=f"{model_name}_epoch={flags.max_epochs}_beta={flags.beta}_latent={flags.latent_dim}_warm_up={warm_up}_lr={flags.lr}_batch={flags.batch_size}_arch={flags.arch}"
+    version=f"{model_name}_epoch={flags.max_epochs}_beta={flags.beta}_latent={flags.latent_dim}_warm_up={warm_up}_lr={flags.lr}_batch={flags.batch_size}_arch={flags.arch}+{flags.key}"
     print(f"\nVERSION : {version}\n")
 
     trainer = Trainer(
