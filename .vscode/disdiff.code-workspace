@@ -1,9 +1,13 @@
 {
     "folders": [
         {
-            "path": ".."
-        }
-    ]
+            "path": "..",
+        },
+
+    ],
+    "settings": {
+        "workbench.editorLargeFileConfirmation": 50
+    }
 
     
 }

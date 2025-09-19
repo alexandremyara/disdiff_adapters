@@ -64,6 +64,8 @@ class CelebA :
     @dataclass
     class Path :
         DATA = "/projects/compures/alexandre/PyTorch-VAE/Data/"
+        BUFF_IMG = join(PROJECT_PATH, "disdiff_adapters/data/celeba/images_train_buff.pt")
+        BUFF_LABELS = join(PROJECT_PATH, "disdiff_adapters/data/celeba/labels_train_buff.pt")
 
     class Params : 
         FACTORS_IN_ORDER = [
@@ -129,8 +131,8 @@ class DSprites:
 
     @dataclass
     class Params :
-        FACTORS_IN_ORDER = ['color', 'shape', 'scale', 'orientation', 'pos_x',
+        FACTORS_IN_ORDER = ['shape', 'scale', 'orientation', 'pos_x',
                         'pos_y']
         
-        NUM_VALUES_PER_FACTOR = {'color': 1, 'shape': 3, 'scale': 6, 
+        NUM_VALUES_PER_FACTOR = {'shape': 3, 'scale': 6, 
                             'orientation': 40, 'pos_x': 32, 'pos_y': 32}

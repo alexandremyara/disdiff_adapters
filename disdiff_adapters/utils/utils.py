@@ -58,40 +58,6 @@ def split(data: torch.Tensor, label: torch.Tensor, ratio: float=0.8) :
 
     return torch.tensor(train_data), torch.tensor(train_label), torch.tensor(test_data), torch.tensor(test_label)
 
-# def display(batch: tuple[torch.Tensor]) :
-#     """
-#     Display a batch of RGB images. 
-#     Batch sould be a tuple of two tensors : ([BATCH_SIZE, 3, H, W], [BATCH_SIZE, 1])
-#     batch_size is always a power of 2.
-
-#     Args:
-#     batch_size: tuple[torch.Tensor], ([BATCH_SIZE, 3, H, W], [BATCH_SIZE, 1])
-
-#     """
-
-#     nb_samples = len(batch[0]) #batch_size
-#     # nb_col = np.log2(nb_samples)
-#     # nb_row = np.log2(nb_samples)
-
-
-#     nb_col = math.ceil(math.sqrt(nb_samples))
-#     nb_row = math.ceil(nb_samples / nb_col)
-
-#     fig, axes = plt.subplots(int(nb_row), int(nb_col), figsize=(10,7))
-
-#     images, labels = batch
-
-#     for i in range(nb_samples):
-#         ax = axes[int(i//nb_row),int(i%nb_col)]
-
-#         img = images[i]
-#         img = 255*(img - img.min()) / (img.max() - img.min() + 1e-8)
-#         img = img.to(torch.uint8)
-        
-#         ax.imshow(img.permute(1,2,0).numpy())
-#         ax.set_title(f"{labels[i].numpy()}")
-#     plt.show()
-
 def display(batch: tuple[torch.Tensor]) -> None:
     """
     Affiche un batch d'images RGB.
@@ -196,7 +162,22 @@ def display_latent(labels: torch.Tensor,
         norm = BoundaryNorm(bounds, cmap.N, clip=True)
         print("\ncmap : personalised\n")
     elif K<10 : cmap = plt.get_cmap('tab10', K)
-    else : cmap=plt.get_cmap('tab20', K)
+    else : 
+        colors = [
+    '#ff0000', '#ff1f00', '#ff3d00', '#ff5c00', '#ff7a00',
+    '#ff9900', '#ffb800', '#ffd600', '#fff500', '#ebff00',
+    '#ccff00', '#aeff00', '#8fff00', '#70ff00', '#52ff00',
+    '#33ff00', '#14ff00', '#00ff0a', '#00ff29', '#00ff47',
+    '#00ff66', '#00ff85', '#00ffa3', '#00ffc2', '#00ffe0',
+    '#00ffff', '#00e0ff', '#00c2ff', '#00a3ff', '#0085ff',
+    '#0066ff', '#0047ff', '#0029ff', '#000aff', '#1400ff',
+    '#3300ff', '#5200ff', '#7000ff', '#8f00ff', '#ae00ff',
+    '#cc00ff', '#eb00ff', '#ff00f5', '#ff00d6', '#ff00b8',
+    '#ff0099', '#ff007a', '#ff005c', '#ff003d', '#ff001f'][:K]
+        cmap = ListedColormap(colors, name="mycats")
+        bounds = np.concatenate([unique_labels - 0.5, [unique_labels[-1] + 0.5]])
+        norm = BoundaryNorm(bounds, cmap.N, clip=True)
+
         
 
     if z is None :
@@ -246,6 +227,9 @@ def set_device(pref_gpu: int=0) -> str :
 
     if is_gpu :
         print("Nombre de GPU :", torch.cuda.device_count())
+        if pref_gpu>=torch.cuda.device_count() : 
+            pref_gpu = 0
+            print(f"{pref_gpu} gpu is not available. Switched on gpu0")
 
         for i in range(torch.cuda.device_count()):
             print(f"\n[ GPU {i} ]")
@@ -258,7 +242,7 @@ def set_device(pref_gpu: int=0) -> str :
     return device, is_gpu
  
 
-
+############### merge plots
 def merge_images(save_gen_path, save_gen_s_path, save_gen_t_path):
     images = [Image.open(path) for path in [save_gen_path, save_gen_s_path, save_gen_t_path]]
     labels = ["generation", "gen_s", "gen_t"]
@@ -295,7 +279,6 @@ def merge_images(save_gen_path, save_gen_s_path, save_gen_t_path):
     
     return final_image
 
-
 def merge_images_with_black_gap(image_paths, gap=10):
     images = [Image.open(p) for p in image_paths]
     widths = [img.width for img in images]
@@ -315,7 +298,6 @@ def merge_images_with_black_gap(image_paths, gap=10):
         merged.paste(p, (0, y))
         y += p.height
     return merged
-
 
 def grid_merge(image_paths, out_path, cols=3, padding=10, bg=(0,0,0), resize_to=None):
     """
@@ -355,6 +337,7 @@ def grid_merge(image_paths, out_path, cols=3, padding=10, bg=(0,0,0), resize_to=
     return canvas
 
 
+#########Log for models
 def log_cross_cov_heatmap(mu_s, logvar_s, mu_t, logvar_t, save_path: str, interactive: bool=False):
     cov_mu = cross_cov(mu_s, mu_t).detach().cpu().numpy()
     assert cov_mu.shape == (mu_s.shape[1], mu_t.shape[1]), "ERROR COV MATRIX SHAPE"
@@ -373,8 +356,6 @@ def log_cross_cov_heatmap(mu_s, logvar_s, mu_t, logvar_t, save_path: str, intera
     plt.savefig(save_path, bbox_inches='tight')
     plt.close(fig)
 
-
-
 def report_nonfinite(**named_tensors):
     problems = []
     for name, t in named_tensors.items():
@@ -389,3 +370,4 @@ def report_nonfinite(**named_tensors):
             problems.append(f"- {name}: NaN={n_nan}, Inf={n_inf}, ex_idx={ex}")
     if problems:
         raise RuntimeError("Non-finite detected:\n" + "\n".join(problems))
+    

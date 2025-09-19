@@ -8,8 +8,10 @@
             "program": "disdiff_adapters/arch/multi_distillme/train.py",
             "args": [
                 "--latent_dim_t=2",
-                "--latent_dim_s=2",
-                "--dataset=shapes",
+                "--latent_dim_s=16",
+                "--beta_s=100",
+                "--dataset=dsprites",
+                "--loss_type=vae",
             ],
             "console": "integratedTerminal"
         },

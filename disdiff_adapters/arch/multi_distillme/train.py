@@ -42,7 +42,15 @@ def parse_args() -> argparse.Namespace:
 
     """
     parser = argparse.ArgumentParser()
-    
+
+
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        help="dataset name used.",
+        default="bloodmnist"
+    )
+
     parser.add_argument(
         "--max_epochs",
         type=int,
@@ -76,13 +84,6 @@ def parse_args() -> argparse.Namespace:
         type=int,
         help="dimension of the latent space",
         default=4
-    )
-
-    parser.add_argument(
-        "--dataset",
-        type=str,
-        help="dataset name used.",
-        default="bloodmnist"
     )
 
     parser.add_argument(
@@ -178,10 +179,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--version_model",
         type=str,
-        default="md"
+        default="debug"
     )
     return parser.parse_args()
-
 
 def main(flags: argparse.Namespace) :
     torch.autograd.set_detect_anomaly(True)
@@ -198,13 +198,14 @@ def main(flags: argparse.Namespace) :
             img_size = 28
             klw = 0.0001
         
-            
         case "dsprites":
             data_module = DSpritesDataModule(batch_size=flags.batch_size)
             param_class = DSprites
             in_channels = 1
             img_size = 64
             klw = 0.000001
+            factor_value = -1
+            select_factor = 1
 
         case "shapes":
             data_module = Shapes3DDataModule(batch_size=flags.batch_size)
@@ -212,6 +213,8 @@ def main(flags: argparse.Namespace) :
             in_channels = 3
             img_size = 64
             klw = 0.000001
+            factor_value = -1
+            select_factor = 0
             #klw = flags.batch_size/(3*1e5)
         
         case "celeba":
@@ -220,6 +223,8 @@ def main(flags: argparse.Namespace) :
             in_channels = 3
             img_size = 64
             klw = 0.000001
+            factor_value = 1
+            select_factor = 15
         case _ :
             raise ValueError("Error flags.dataset")
         
@@ -229,8 +234,8 @@ def main(flags: argparse.Namespace) :
                 img_size=img_size,
                 latent_dim_s=flags.latent_dim_s, 
                 latent_dim_t=flags.latent_dim_t,
-                select_factor=flags.factor,
-                factor_value=flags.factor_value,
+                select_factor=select_factor,
+                factor_value=factor_value,
                 res_block=res_block,
                 beta_s=flags.beta_s,
                 beta_t=flags.beta_t,
@@ -247,26 +252,41 @@ def main(flags: argparse.Namespace) :
     
     version=f"{model_name}_epoch={flags.max_epochs}_beta=({flags.beta_s},{flags.beta_t})_latent=({flags.latent_dim_s},{flags.latent_dim_t})_batch={flags.batch_size}_warm_up={warm_up}_lr={flags.lr}_arch={flags.arch}+l_cov={flags.l_cov}+l_nce={flags.l_nce}+l_anti_nce={flags.l_anti_nce}_{flags.key}" 
     print(f"\nVERSION : {version}\n")
+    print(f"Select factor : {select_factor}, factor value : {factor_value}")
 
-    trainer = Trainer(
-            accelerator="auto",
-            devices=flags.gpus,
-            gradient_clip_val= 3.0,
-            max_epochs=flags.max_epochs,
-            log_every_n_steps=5,
-
-            logger=TensorBoardLogger(
+    logger=TensorBoardLogger(
                 save_dir=LOG_DIR+f"/{flags.version_model}",
                 name=join(flags.dataset, f"loss_{flags.loss_type}", flags.experience),
                 version=version,
                 default_hp_metric=False,
-            ),
-            callbacks=[
-                ModelCheckpoint(monitor="loss/val", mode="min"),
-                LearningRateMonitor("epoch"),
-            ]
-        )
-    
+            )
+
+    ckpt_dir = os.path.join(logger.log_dir, "checkpoints")
+    os.makedirs(ckpt_dir, exist_ok=True)
+
+    ckpt_cb = ModelCheckpoint(
+        dirpath=ckpt_dir,
+        monitor="loss/val",
+        mode="min",
+        save_top_k=1,          # garde uniquement le meilleur
+        save_last=True,        # en plus, maintient checkpoints/last.ckpt (dernier)
+        filename="best-{epoch:03d}",  # le nom du "best" (Lightning ajoutera la métrique)
+    )
+
+    trainer = Trainer(
+        accelerator="auto",
+        devices=flags.gpus,
+        gradient_clip_val=3.0,
+        max_epochs=flags.max_epochs,
+        log_every_n_steps=5,
+        check_val_every_n_epoch=1,   # val à chaque époque => last.ckpt se met à jour à chaque epoch
+        logger=logger,
+        callbacks=[
+            ckpt_cb,
+            LearningRateMonitor("epoch"),
+        ]
+    )
+
     trainer.fit(model, data_module)
 
 

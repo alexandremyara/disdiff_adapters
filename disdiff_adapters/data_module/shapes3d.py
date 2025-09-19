@@ -50,29 +50,15 @@ class Shapes3DDataModule(LightningDataModule) :
         else : pass
 
     def setup(self, stage: str|None) :
-        #data = np.load(Shapes3D.Path.NPZ)
         if stage in ("fit", None) :
             train_images, train_labels = np.load(self.train_path)["images"],np.load(self.train_path)["labels"]
             val_images, val_labels = np.load(self.val_path)["images"],np.load(self.val_path)["labels"]
-            #train_labels = data["train_labels.npy"]
-
-            #train_images, train_labels, val_images, val_labels = split(train_images, train_labels)
-
-            # print("loading of tensors - train")
-            # train_images, train_labels = torch.load(self.train_path)
-            # print("loading of tensors - val")
-            # val_images, val_labels = torch.load(self.val_path)
 
             print("load dataset - train")
             self.train_dataset = Shapes3DDataset(train_images, train_labels)
             print("load dataset val")
             self.val_dataset = Shapes3DDataset(val_images, val_labels)
         else :
-
-            #test_images = data["test_images.npy"]
-            #test_labels = data["test_labels.npy"]
-
-            #test_images, test_labels = torch.load(self.test_path)
             test_images, test_labels = np.load(self.test_path)["images"], np.load(self.test_path)["labels"]
             self.test_dataset = Shapes3DDataset(test_images, test_labels)
         print("tensors loaded.")

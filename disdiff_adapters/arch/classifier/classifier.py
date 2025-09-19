@@ -5,7 +5,8 @@ from lightning import LightningModule
 from torchmetrics.classification import Accuracy
 
 class Classifier(LightningModule):
-    def __init__(self, latent_dim: int, num_classes: int, hidden_dim: int = 256, lr: float = 1e-3, dropout: float = 0.2):
+    def __init__(self, latent_dim: int, num_classes: int, hidden_dim: int = 256, lr: float = 1e-3, dropout: float = 0.2,
+                 select_factor: int=0):
         super().__init__()
         self.save_hyperparameters()
 
@@ -26,7 +27,7 @@ class Classifier(LightningModule):
         self.train_acc = Accuracy(task="multiclass", num_classes=num_classes)
         self.val_acc = Accuracy(task="multiclass", num_classes=num_classes)
         self.test_acc = Accuracy(task="multiclass", num_classes=num_classes)
-
+ 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.classifier(x)
 
@@ -34,13 +35,13 @@ class Classifier(LightningModule):
         return F.cross_entropy(y_pred, y_true)
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+        return torch.optim.AdamW(self.parameters(), lr=self.hparams.lr)
 
     def training_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-        loss = self.loss(logits, y)
-        acc = self.train_acc(logits, y)
+        loss = self.loss(logits, y[:, self.hparams.select_factor])
+        acc = self.train_acc(logits, y[:, self.hparams.select_factor])
 
         self.log("train/loss", loss, on_step=False, on_epoch=True)
         self.log("train/acc", acc, on_step=False, on_epoch=True)
@@ -49,8 +50,8 @@ class Classifier(LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-        loss = self.loss(logits, y)
-        acc = self.val_acc(logits, y)
+        loss = self.loss(logits, y[:, self.hparams.select_factor])
+        acc = self.val_acc(logits, y[:, self.hparams.select_factor])
 
         self.log("val/loss", loss, on_step=False, on_epoch=True)
         self.log("val/acc", acc, on_step=False, on_epoch=True)
@@ -58,8 +59,8 @@ class Classifier(LightningModule):
     def test_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-        loss = self.loss(logits, y)
-        acc = self.test_acc(logits, y)
+        loss = self.loss(logits, y[:, self.hparams.select_factor])
+        acc = self.test_acc(logits, y[:, self.hparams.select_factor])
 
         self.log("test/loss", loss, on_step=False, on_epoch=True)
         self.log("test/acc", acc, on_step=False, on_epoch=True)

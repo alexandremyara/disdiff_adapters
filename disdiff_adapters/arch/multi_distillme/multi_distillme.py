@@ -95,6 +95,9 @@ class MultiDistillMeModule(LightningModule) :
         self.images_train_buff = []
         self.labels_train_buff = []
         self.latent_train_buff:dict[str, torch.Tensor] = {"s" : [], "t": []}
+        self.images_val_buff = []
+        self.labels_val_buff = []
+        self.latent_val_buff:dict[str, torch.Tensor] = {"s" : [], "t": []}
 
         self.constrastive = InfoNCESupervised(temperature=self.hparams.temp)
         self.current_batch = 0
@@ -102,93 +105,6 @@ class MultiDistillMeModule(LightningModule) :
     def configure_optimizers(self):
         return torch.optim.AdamW(self.model.parameters())
     
-    def generate(self, nb_samples: int=16) :
-        eps_s = torch.randn_like(torch.zeros([nb_samples, self.hparams.latent_dim_s])).to(self.device, torch.float32)
-        eps_t = torch.randn_like(torch.zeros([nb_samples, self.hparams.latent_dim_t])).to(self.device, torch.float32)
-
-
-        z = self.model.merge_operation(eps_s, eps_t)
-
-        x_hat_logits = self.model.decoder(z)
-        return x_hat_logits
-
-    def generate_cond(self, nb_samples: int=16, cond: str="t", pos: int=0, 
-                      z_t=None, z_s=None, img_ref=None, factor_value=-1) :
-        #Test cond validity and if z_t/z_s are specified properly
-        if not isinstance(cond, str) or cond.lower() not in {"s", "t"}:
-            raise ValueError(f"cond must be 's' or 't', got {cond!r}")
-        assert (z_t is None) == (z_s is None), "You must specified z_s and z_t, or none of them"
-
-        #When z_t/z_s are not specified, we use the buffer
-        if z_t is None : 
-            z_t= self.latent_train_buff["t"]
-            z_s = self.latent_train_buff["s"]
-        else : print("interactive mode : on") #If z_t/z_s are specified, mode is not auto
-
-        #If a factor_value should be represented, we mask the latent space to select the correct value
-        if factor_value != -1 :
-            mask = (self.labels_train_buff[:, self.hparams.select_factor] == factor_value)
-            if cond == "s" : z_t = z_t[mask]
-            else : z_s = z_s[mask]
-        else : mask = torch.ones(z_t.size(0), dtype=bool)
-
-        if cond == "t" :
-            nb_sample_latent = z_t.shape[0]
-            assert nb_samples <= nb_sample_latent, "Too much points"
-
-            idx_t = torch.randint_like(torch.zeros([nb_samples]), high=nb_sample_latent, dtype=torch.int32)
-            eps_t = z_t[idx_t].to(self.device)
-
-            if img_ref is None :
-                eps_s = torch.stack(nb_samples*[z_s[pos]]).to(self.device)
-            else : 
-                with torch.no_grad() : _, _, _, eps_s, _, _ = self(img_ref.to(self.device), test=True)
-                eps_s = torch.cat(nb_samples*[eps_s]).to(self.device)
-
-            assert eps_s.device == eps_t.device, "eps_s, eps_t have to be on the same device"
-            z = self.model.merge_operation(eps_s, eps_t)
-
-        else :
-            nb_sample_latent = z_s.shape[0] 
-            assert nb_samples <= nb_sample_latent, "Too much points" 
-
-            idx_s = torch.randint_like(torch.zeros([nb_samples]), high=nb_sample_latent, dtype=torch.int32)
-            eps_s = z_s[idx_s].to(self.device)
-
-            if img_ref is None :
-                eps_t = torch.stack(nb_samples*[z_t[pos]]).to(self.device)
-            else : 
-                with torch.no_grad() : _, _, _, _, eps_t, _ = self(img_ref.to(self.device), test=True)
-                eps_t = torch.cat(nb_samples*[eps_t]).to(self.device)
-            assert eps_t.device == eps_s.device, "eps_s, eps_t have to be on the same device"
-            z = self.model.merge_operation(eps_s, eps_t)
-
-        x_hat_logits = self.model.decoder(z)
-        ref_img = img_ref if img_ref is not None else self.images_train_buff[mask][pos]
-        return x_hat_logits.detach().cpu(), ref_img.unsqueeze(0).detach().cpu()
-
-    def show_reconstruct(self, images: torch.Tensor) :
-        images = images.to(self.device)[:8]
-        with torch.no_grad() : mus_logvars_s, mus_logvars_t, images_gen, z_s, z_t, z = self(images, test=True)
-
-        fig, axes = plt.subplots(len(images), 2, figsize=(7, 20))
-
-        for i in range(len(images)) :
-            img = images[i]
-            img_gen = images_gen[i]
-
-            images_proc = (255*((img - img.min()) / (img.max() - img.min() + 1e-8))).to("cpu",torch.uint8).permute(1,2,0).detach().cpu().numpy()
-            images_gen_proc = (255*((img_gen - img_gen.min()) / (img_gen.max() - img_gen.min() + 1e-8))).to("cpu",torch.uint8).permute(1,2,0).detach().cpu().numpy()
-
-            axes[i,0].imshow(images_proc)
-            axes[i,1].imshow(images_gen_proc)
-
-            axes[i,0].set_title("original")
-            axes[i,1].set_title("reco")
-        plt.tight_layout()
-        plt.show()
-        return mus_logvars_s, mus_logvars_t, images_gen, z_s, z_t, z
-
     def forward(self, images: torch.Tensor, test=False) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor], torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z = self.model(images)
 
@@ -279,10 +195,14 @@ class MultiDistillMeModule(LightningModule) :
     def validation_step(self, batch: tuple[torch.Tensor]):
         images, labels = batch
         mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z = self.forward(images)
-        loss = self.loss(mus_logvars_s, mus_logvars_t, image_hat_logits, images, z_s, z_t, labels=labels[:, 0])
+        loss = self.loss(mus_logvars_s, mus_logvars_t, image_hat_logits, images, z_s, z_t, labels=labels[:, self.hparams.select_factor])
         if torch.isnan(loss):
             raise ValueError("NaN loss")
         self.log("loss/val", loss)
+
+        self.images_val_buff.append(images.detach().cpu())
+        self.labels_val_buff.append(labels.detach().cpu())
+
         print(f"Val loss: {loss}")
     
     def test_step(self, batch: tuple[torch.Tensor]) :
@@ -300,16 +220,149 @@ class MultiDistillMeModule(LightningModule) :
 
         if self.images_test_buff is None : self.images_test_buff = images
 
+
+####################### Generate and Reco
+
+    def generate(self, nb_samples: int=16, is_val: bool=False) :
+        #eps_s = torch.randn_like(torch.zeros([nb_samples, self.hparams.latent_dim_s])).to(self.device, torch.float32)
+        #eps_t = torch.randn_like(torch.zeros([nb_samples, self.hparams.latent_dim_t])).to(self.device, torch.float32)
+
+        buff_latents = self.latent_val_buff if is_val else self.latent_train_buff
+        buff_labels = self.labels_val_buff if is_val else self.labels_train_buff
+        buff_imgs = self.images_val_buff if is_val else self.images_train_buff
+
+        z_t= buff_latents["t"]
+        z_s = buff_latents["s"]
+
+        nb_sample_latent = z_t.shape[0]
+        assert nb_samples <= nb_sample_latent, "Too much points"
+
+        idx_t = torch.randint_like(torch.zeros([nb_samples]), high=nb_sample_latent, dtype=torch.int32)
+        eps_t = z_t[idx_t].to(self.device)
+
+        idx_s = torch.randint_like(torch.zeros([nb_samples]), high=nb_sample_latent, dtype=torch.int32)
+        eps_s = z_s[idx_s].to(self.device)
+
+        z = self.model.merge_operation(eps_s, eps_t)
+
+        x_hat_logits = self.model.decoder(z)
+        return x_hat_logits
+
+    def generate_cond(self, nb_samples: int=16, cond: str="t", pos: int=0, 
+                      z_t=None, z_s=None, img_ref=None, factor_value=-1, is_val: bool=False) :
+        
+        buff_latents = self.latent_val_buff if is_val else self.latent_train_buff
+        buff_labels = self.labels_val_buff if is_val else self.labels_train_buff
+        buff_imgs = self.images_val_buff if is_val else self.images_train_buff
+
+        #Test cond validity and if z_t/z_s are specified properly
+        if not isinstance(cond, str) or cond.lower() not in {"s", "t"}:
+            raise ValueError(f"cond must be 's' or 't', got {cond!r}")
+        assert (z_t is None) == (z_s is None), "You must specified z_s and z_t, or none of them"
+
+        #When z_t/z_s are not specified, we use the buffer
+        if z_t is None : 
+            z_t= buff_latents["t"]
+            z_s = buff_latents["s"]
+        else : print("interactive mode : on") #If z_t/z_s are specified, mode is not auto
+
+        #If a factor_value should be represented, we mask the latent space to select the correct value
+        if factor_value != -1 :
+            mask = (buff_labels[:, self.hparams.select_factor] == factor_value)
+            if cond == "s" : z_t = z_t[mask]
+            else : z_s = z_s[mask]
+        else : mask = torch.ones(z_t.size(0), dtype=bool)
+
+        if cond == "t" :
+            nb_sample_latent = z_t.shape[0]
+            assert nb_samples <= nb_sample_latent, "Too much points"
+
+            idx_t = torch.randint_like(torch.zeros([nb_samples]), high=nb_sample_latent, dtype=torch.int32)
+            eps_t = z_t[idx_t].to(self.device)
+
+            if img_ref is None :
+                eps_s = torch.stack(nb_samples*[z_s[pos]]).to(self.device)
+            else : 
+                with torch.no_grad() : _, _, _, eps_s, _, _ = self(img_ref.to(self.device), test=True)
+                eps_s = torch.cat(nb_samples*[eps_s]).to(self.device)
+
+            assert eps_s.device == eps_t.device, "eps_s, eps_t have to be on the same device"
+            z = self.model.merge_operation(eps_s, eps_t)
+
+        else :
+            nb_sample_latent = z_s.shape[0] 
+            assert nb_samples <= nb_sample_latent, "Too much points" 
+
+            idx_s = torch.randint_like(torch.zeros([nb_samples]), high=nb_sample_latent, dtype=torch.int32)
+            eps_s = z_s[idx_s].to(self.device)
+
+            if img_ref is None :
+                eps_t = torch.stack(nb_samples*[z_t[pos]]).to(self.device)
+            else : 
+                with torch.no_grad() : _, _, _, _, eps_t, _ = self(img_ref.to(self.device), test=True)
+                eps_t = torch.cat(nb_samples*[eps_t]).to(self.device)
+            assert eps_t.device == eps_s.device, "eps_s, eps_t have to be on the same device"
+            z = self.model.merge_operation(eps_s, eps_t)
+
+        x_hat_logits = self.model.decoder(z)
+        ref_img = img_ref if img_ref is not None else buff_imgs[mask][pos]
+        return x_hat_logits.detach().cpu(), ref_img.unsqueeze(0).detach().cpu()
+
+    def merge (self, images_s: torch.Tensor, images_t: torch.Tensor) :
+        images_s = images_s.to(self.device, torch.float32)
+        images_t = images_t.to(self.device, torch.float32)
+        select_factor = self.hparams.select_factor
+        if self.hparams.map_idx_labels is not None :
+            select_factor = self.hparams.map_idx_labels[select_factor]
+        print(f"The factor encoded in t is {select_factor}")
+
+        self.model.eval()
+        with torch.no_grad() :
+            mu_s, _ = self.model.encoder_s(images_s)
+            mu_t, _ = self.model.encoder_t(images_t)
+            z = self.model.merge_operation(mu_s, mu_t)
+            images_hat_logits = self.model.decoder(z)
+        return images_hat_logits
+
+    def show_reconstruct(self, images: torch.Tensor) :
+        images = images.to(self.device)[:8]
+        with torch.no_grad() : mus_logvars_s, mus_logvars_t, images_gen, z_s, z_t, z = self(images, test=True)
+
+        fig, axes = plt.subplots(len(images), 2, figsize=(7, 20))
+
+        for i in range(len(images)) :
+            img = images[i]
+            img_gen = images_gen[i]
+
+            images_proc = (255*((img - img.min()) / (img.max() - img.min() + 1e-8))).to("cpu",torch.uint8).permute(1,2,0).detach().cpu().numpy()
+            images_gen_proc = (255*((img_gen - img_gen.min()) / (img_gen.max() - img_gen.min() + 1e-8))).to("cpu",torch.uint8).permute(1,2,0).detach().cpu().numpy()
+
+            axes[i,0].imshow(images_proc)
+            axes[i,1].imshow(images_gen_proc)
+
+            axes[i,0].set_title("original")
+            axes[i,1].set_title("reco")
+        plt.tight_layout()
+        plt.show()
+        return mus_logvars_s, mus_logvars_t, images_gen, z_s, z_t, z
+
+
+################### Hook lightning
+
     def on_train_epoch_start(self):
         self.images_train_buff = []
         self.labels_train_buff = []
         self.latent_train_buff = {"s" : [], "t": []}
         self.current_batch = 0
 
+        self.images_val_buff = []
+        self.labels_val_buff = []
+        self.latent_val_buff = {"s" : [], "t": []}
+
     def on_train_epoch_end(self):
         epoch = self.current_epoch
 
-        if epoch % 2 == 0:
+        if epoch % 1 == 0:
             try : os.mkdir(os.path.join(self.logger.log_dir, f"epoch_{epoch}"))
             except FileExistsError as e : pass
 
@@ -334,10 +387,40 @@ class MultiDistillMeModule(LightningModule) :
             ### latent space
             self.log_latent()
 
-    def reload_latent(self):
+    def on_validation_epoch_end(self) :
+        epoch = self.current_epoch
+
+        if epoch % 1 == 0:
+            try : os.mkdir(os.path.join(self.logger.log_dir, f"epoch_{epoch}"))
+            except FileExistsError as e : pass
+            try : os.mkdir(os.path.join(self.logger.log_dir, f"epoch_{epoch}", "val"))
+            except FileExistsError as e : pass
+
+            #compute a sample of the latent space
+            for images in self.images_val_buff :
+                with torch.no_grad() : _, _, _, z_s, z_t, z = self.forward(images.to(self.device), test=True) #images shape : [32, 3, 64, 64]
+
+                self.latent_val_buff["s"].append(z_s.detach().cpu())
+                self.latent_val_buff["t"].append(z_t.detach().cpu())
+            self.latent_val_buff["s"] = torch.cat(self.latent_val_buff["s"])
+            self.latent_val_buff["t"] = torch.cat(self.latent_val_buff["t"])
+
+            self.images_val_buff = torch.cat(self.images_val_buff)
+            self.labels_val_buff = torch.cat(self.labels_val_buff)
+            mus_logvars_s, mus_logvars_t = self.log_reco(is_val=True)
+
+            self.log_gen_images(is_val=True)
+
+            path_heatmap = join(self.logger.log_dir, f"epoch_{epoch}","val",f"cov_{epoch}.png")
+            log_cross_cov_heatmap(*mus_logvars_s, *mus_logvars_t, save_path=path_heatmap)
+
+            ### latent space
+            self.log_latent(is_val=True)
+
+    def reload_latent(self, Class_=Shapes3D):
         self.on_train_epoch_start()
-        self.images_train_buff = torch.load(Shapes3D.Path.BUFF_IMG)
-        self.labels_train_buff = torch.load(Shapes3D.Path.BUFF_LABELS)
+        self.images_train_buff = torch.load(Class_.Path.BUFF_IMG)
+        self.labels_train_buff = torch.load(Class_.Path.BUFF_LABELS)
 
         if type(self.images_train_buff) == list : self.images_train_buff = torch.cat(self.images_train_buff)
         if type(self.labels_train_buff) == list : self.labels_train_buff = torch.cat(self.labels_train_buff)
@@ -355,7 +438,7 @@ class MultiDistillMeModule(LightningModule) :
                 self.latent_train_buff["t"].append(z_t.detach().cpu())
 
         images_batched = torch.stack(pill)
-        print(images_batched.shape)
+
         with torch.no_grad() : _, _, _, z_s, z_t, z = self.forward(images_batched.to(self.device), test=True) #images shape : [32, 3, 64, 64]
         pill = []
         self.latent_train_buff["s"].append(z_s.detach().cpu())
@@ -377,80 +460,104 @@ class MultiDistillMeModule(LightningModule) :
 
         vutils.save_image(images_gen.detach().cpu(), os.path.join(self.logger.log_dir, "gen.png"))
 
-    def log_reco(self) :
-        mus_logvars_s, mus_logvars_t, images_gen, z_s, z_t, z = self.show_reconstruct(self.images_train_buff[:8]) #display images and reconstruction in interactive mode; save the plot in plt.gcf() if non interactive
+################# Evaluation function
+
+    def log_reco(self, is_val: bool=False) :
+        buff_imgs = self.images_val_buff if is_val else self.images_train_buff
+        mus_logvars_s, mus_logvars_t, images_gen, z_s, z_t, z = self.show_reconstruct(buff_imgs[:8]) #display images and reconstruction in interactive mode; save the plot in plt.gcf() if non interactive
         #save the recontruction plot saved in plt.gcf()
         save_reco_path = os.path.join(self.logger.log_dir, f"epoch_{self.current_epoch}", f"reco_{self.current_epoch}.png")
+        if is_val : save_reco_path = os.path.join(self.logger.log_dir, f"epoch_{self.current_epoch}", "val" ,f"reco_{self.current_epoch}.png")
+
         fig = plt.gcf()
         fig.savefig(save_reco_path)
         plt.close(fig)
         return mus_logvars_s, mus_logvars_t
 
-    def log_gen_images(self) :
+    def log_gen_images(self, is_val: bool=False) :
         epoch = self.current_epoch
 
         #save the generate images
-        images_gen = self.generate()
+        images_gen = self.generate(is_val=is_val)
         save_gen_path = join(self.logger.log_dir, f"epoch_{epoch}", f"gen_{epoch}.png")
+        if is_val : save_gen_path = join(self.logger.log_dir, f"epoch_{epoch}","val",f"gen_{epoch}.png")
         vutils.save_image(images_gen.detach().cpu(), save_gen_path)
             
         #save the cond generate image s
         for i in range(4) :
             factor_value = self.hparams.factor_value if i%2 else -1
-            images_cond_s_gen, input_t = self.generate_cond(cond="s", pos=i, factor_value=factor_value)
+            images_cond_s_gen, input_t = self.generate_cond(cond="s", pos=i, factor_value=factor_value, is_val=is_val)
             images_cond_s_gen_ref = torch.cat([images_cond_s_gen.detach().cpu(), input_t])
             save_gen_s_path = join(self.logger.log_dir, f"epoch_{epoch}", f"gen_s_{epoch}_{i}.png")
+            if is_val : save_gen_s_path = join(self.logger.log_dir, f"epoch_{epoch}","val",f"gen_s_{epoch}_{i}.png")
             vutils.save_image(images_cond_s_gen_ref, save_gen_s_path)
 
         #save the cond generate image t
         for i in range(4) :
             factor_value = self.hparams.factor_value if i%2 else -1
-            images_cond_t_gen, input_s = self.generate_cond(cond="t", pos=i, factor_value=factor_value)
+            images_cond_t_gen, input_s = self.generate_cond(cond="t", pos=i, factor_value=factor_value, is_val=is_val)
             images_cond_t_gen_ref = torch.cat([images_cond_t_gen.detach().cpu(), input_s])
             save_gen_t_path = join(self.logger.log_dir, f"epoch_{epoch}", f"gen_t_{epoch}_{i}.png")
+            if is_val : save_gen_t_path = join(self.logger.log_dir, f"epoch_{epoch}","val" ,f"gen_t_{epoch}_{i}.png")
             vutils.save_image(images_cond_t_gen_ref.detach().cpu(), save_gen_t_path)
 
         ### Merge in one image
-        final_gen_s = merge_images_with_black_gap(
-                                    [ join(self.logger.log_dir, f"epoch_{epoch}", f"gen_s_{epoch}_{i}.png") for i in range(4)]
-                                    )
-        final_gen_t = merge_images_with_black_gap(
-                        [ join(self.logger.log_dir, f"epoch_{epoch}", f"gen_t_{epoch}_{i}.png") for i in range(4)]
-                        )
+        if is_val : path_epoch_s = [ join(self.logger.log_dir, f"epoch_{epoch}","val",f"gen_s_{epoch}_{i}.png") for i in range(4)]
+        else : path_epoch_s = [ join(self.logger.log_dir, f"epoch_{epoch}",f"gen_s_{epoch}_{i}.png") for i in range(4)]
+        final_gen_s = merge_images_with_black_gap(path_epoch_s)
+
+        if is_val : path_epoch_t = [ join(self.logger.log_dir, f"epoch_{epoch}", "val",f"gen_t_{epoch}_{i}.png") for i in range(4)]
+        else : path_epoch_t = [ join(self.logger.log_dir, f"epoch_{epoch}",f"gen_t_{epoch}_{i}.png") for i in range(4)]
+        final_gen_t = merge_images_with_black_gap(path_epoch_t)
+        
         final_gen_s.save(join(self.logger.log_dir, "final_gen_s.png"))
         final_gen_t.save(join(self.logger.log_dir, "final_gen_t.png"))
         final_image = merge_images(save_gen_path, join(self.logger.log_dir, "final_gen_s.png"), join(self.logger.log_dir, "final_gen_t.png"))
-        save_gen_all_path = join(self.logger.log_dir, f"epoch_{epoch}", f"gen_all_{epoch}.png")
+        if is_val : save_gen_all_path = join(self.logger.log_dir, f"epoch_{epoch}","val",f"gen_all_{epoch}.png")
+        else : save_gen_all_path = join(self.logger.log_dir, f"epoch_{epoch}",f"gen_all_{epoch}.png")
         final_image.save(save_gen_all_path)
 
         os.remove(join(self.logger.log_dir, "final_gen_s.png"))
         os.remove(join(self.logger.log_dir, "final_gen_t.png"))
         for i in range(4) : 
-            os.remove(join(self.logger.log_dir, f"epoch_{epoch}", f"gen_s_{epoch}_{i}.png"))
-            os.remove(join(self.logger.log_dir, f"epoch_{epoch}", f"gen_t_{epoch}_{i}.png"))
+            os.remove(path_epoch_t[i])
+            os.remove(path_epoch_s[i])
 
-    def log_latent(self) :
-        number_labels = self.labels_train_buff.shape[1]
+    def log_latent(self, is_val: bool=False) :
+        buff_latents = self.latent_val_buff if is_val else self.latent_train_buff
+        buff_labels = self.labels_val_buff if is_val else self.labels_train_buff
+        buff_imgs = self.images_val_buff if is_val else self.images_train_buff
+
+        number_labels = buff_labels.shape[1]
         
         for i in range(number_labels) :
-            labels = self.labels_train_buff[:, i].unsqueeze(1)
+            labels = buff_labels[:, i].unsqueeze(1)
             z_s_path = join(self.logger.log_dir, "z_s.png")
             z_t_path = join(self.logger.log_dir, "z_t.png")
             title = f"latent space {i}" if self.hparams.map_idx_labels is None else self.hparams.map_idx_labels[i]
 
-            display_latent(labels=labels, z=self.latent_train_buff["s"], title=title)
+            display_latent(labels=labels, z=buff_latents["s"], title=title)
             fig = plt.gcf()
             fig.savefig(z_s_path)
             plt.close(fig)
 
-            display_latent(labels=labels, z=self.latent_train_buff["t"], title=title)
+            display_latent(labels=labels, z=buff_latents["t"], title=title)
             fig = plt.gcf()
             fig.savefig(z_t_path)
             plt.close(fig)
             latent_img = merge_images_with_black_gap([z_s_path, z_t_path])
-            latent_img.save(join(self.logger.log_dir, f"epoch_{self.current_epoch}", f"latent_space_{i}_{self.current_epoch}.png"))
+            
+            if is_val : path_latent = join(self.logger.log_dir, f"epoch_{self.current_epoch}", "val", f"latent_space_{i}_{self.current_epoch}.png")
+            else : path_latent = join(self.logger.log_dir, f"epoch_{self.current_epoch}", f"latent_space_{i}_{self.current_epoch}.png")
+            latent_img.save(path_latent)
             os.remove(z_s_path)
             os.remove(z_t_path)
 
-        grid_merge([join(self.logger.log_dir, f"epoch_{self.current_epoch}", f"latent_space_{i}_{self.current_epoch}.png") for i in range(number_labels)], join(self.logger.log_dir, f"epoch_{self.current_epoch}", f"latent_space_{self.current_epoch}.png"))
-        for i in range(number_labels) : os.remove(join(self.logger.log_dir, f"epoch_{self.current_epoch}", f"latent_space_{i}_{self.current_epoch}.png"))
+        if is_val : 
+            path_latents = [join(self.logger.log_dir, f"epoch_{self.current_epoch}", "val", f"latent_space_{i}_{self.current_epoch}.png") for i in range(number_labels)]
+            final_latent = join(self.logger.log_dir, f"epoch_{self.current_epoch}", "val", f"latent_space_{self.current_epoch}.png")
+        else :
+            path_latents = [join(self.logger.log_dir, f"epoch_{self.current_epoch}", f"latent_space_{i}_{self.current_epoch}.png") for i in range(number_labels)]
+            final_latent = join(self.logger.log_dir, f"epoch_{self.current_epoch}", f"latent_space_{self.current_epoch}.png")
+        grid_merge(path_latents,final_latent)
+        for i in range(number_labels) : os.remove(path_latents[i])
