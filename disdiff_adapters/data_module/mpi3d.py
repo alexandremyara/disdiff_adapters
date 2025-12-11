@@ -6,16 +6,16 @@ import numpy as np
 
 from os.path import join, exists
 
-from disdiff_adapters.dataset import DSpritesDataset
+from disdiff_adapters.dataset.mpi3d import MPI3DDataset
 from disdiff_adapters.utils.utils import load_h5, split
-from disdiff_adapters.utils.const import DSprites
+from disdiff_adapters.utils.const import MPI3D
 
-class DSpritesDataModule(LightningDataModule) :
+class MPI3DDataModule(LightningDataModule) :
     
-    def __init__(self, h5_path: str=DSprites.Path.H5, 
-                 train_path: str=DSprites.Path.TRAIN,
-                 val_path: str=DSprites.Path.VAL,
-                 test_path: str=DSprites.Path.TEST,
+    def __init__(self, h5_path: str=MPI3D.Path.H5, 
+                 train_path: str=MPI3D.Path.TRAIN,
+                 val_path: str=MPI3D.Path.VAL,
+                 test_path: str=MPI3D.Path.TEST,
                  ratio: int=0.8,
                  batch_size: int=8,
                  loader: DataLoader|None=None) :
@@ -35,11 +35,12 @@ class DSpritesDataModule(LightningDataModule) :
                 train_images, train_labels, test_images, test_labels = split(images, labels)
                 train_images, train_labels, val_images, val_labels = split(train_images, train_labels)
             else :
-                data = np.load(DSprites.Path.NPZ)
-                train_images = data["imgs"]
-                train_labels = data["latents_classes"]
+                data = np.load(MPI3D.Path.NPZ)
+                train_images = data["train_images.npy"]
+                train_labels = data["train_labels.npy"]
+                test_images = data["test_images.npy"]
+                test_labels = data["test_labels.npy"]
 
-                train_images, train_labels, test_images, test_labels = split(train_images, train_labels)
                 train_images, train_labels, val_images, val_labels = split(train_images, train_labels)
 
             np.savez(self.train_path, images=train_images, labels=train_labels)
@@ -49,31 +50,17 @@ class DSpritesDataModule(LightningDataModule) :
         else : pass
 
     def setup(self, stage: str|None) :
-        #data = np.load(DSprites.Path.NPZ)
         if stage in ("fit", None) :
             train_images, train_labels = np.load(self.train_path)["images"],np.load(self.train_path)["labels"]
             val_images, val_labels = np.load(self.val_path)["images"],np.load(self.val_path)["labels"]
-            #train_labels = data["train_labels.npy"]
-
-            #train_images, train_labels, val_images, val_labels = split(train_images, train_labels)
-
-            # print("loading of tensors - train")
-            # train_images, train_labels = torch.load(self.train_path)
-            # print("loading of tensors - val")
-            # val_images, val_labels = torch.load(self.val_path)
 
             print("load dataset - train")
-            self.train_dataset = DSpritesDataset(train_images, train_labels)
+            self.train_dataset = MPI3DDataset(train_images, train_labels)
             print("load dataset val")
-            self.val_dataset = DSpritesDataset(val_images, val_labels)
+            self.val_dataset = MPI3DDataset(val_images, val_labels)
         else :
-
-            #test_images = data["test_images.npy"]
-            #test_labels = data["test_labels.npy"]
-
-            #test_images, test_labels = torch.load(self.test_path)
             test_images, test_labels = np.load(self.test_path)["images"], np.load(self.test_path)["labels"]
-            self.test_dataset = DSpritesDataset(test_images, test_labels)
+            self.test_dataset = MPI3DDataset(test_images, test_labels)
         print("tensors loaded.")
         self.set_dataloader(self.loader)
 

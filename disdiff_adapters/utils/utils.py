@@ -61,7 +61,7 @@ def split(data: torch.Tensor, label: torch.Tensor, ratio: float=0.8) :
 def display(batch: tuple[torch.Tensor]) -> None:
     """
     Affiche un batch d'images RGB.
-    batch = (images [B,3,H,W], labels [B,...])
+    batch = (images [B,3,H,W], labels [B,])
     """
     images, labels = batch
     nb_samples = images.size(0)
@@ -115,12 +115,28 @@ def build_mask(labels: torch.Tensor, select_factor: int, factor_value) -> tuple[
     idx_m2o = mask.nonzero(as_tuple=True)[0].to(torch.long) # [M]
     return mask, idx_m2o
 
-def sample_from(mu_logvar: tuple[torch.Tensor], test=False) -> torch.Tensor :
+def sample_from(mu_logvar: tuple[torch.Tensor], test: bool=False) -> torch.Tensor:
     mu, logvar = mu_logvar
-    eps = torch.randn_like(logvar)
-    
-    if test: return mu
-    else : return mu + torch.exp(0.5 * logvar) * eps
+
+    # clamp pour éviter exp(0.5 * logvar) -> inf
+    logvar = torch.clamp(logvar, min=-20.0, max=20.0)
+
+    if test:
+        return mu
+
+    eps = torch.randn_like(mu)
+    std = torch.exp(0.5 * logvar)
+    z = mu + std * eps
+
+    # optionnel : garde-fou supplémentaire
+    if not torch.isfinite(z).all():
+        print("[sample_from] Non-finite in z:",
+              "NaN =", torch.isnan(z).sum().item(),
+              "Inf =", torch.isinf(z).sum().item())
+        raise ValueError("Non-finite z in sample_from")
+
+    return z
+
 
 
 def del_outliers(arr: np.ndarray, k: int) -> np.ndarray:
@@ -212,7 +228,7 @@ def display_latent(labels: torch.Tensor,
     plt.show()
     
 
-def set_device(pref_gpu: int=0) -> str :
+def set_device(pref_gpu: int=0, verb=False) -> str :
     """
     Looking for a GPU and display informations if available.
 
@@ -226,46 +242,80 @@ def set_device(pref_gpu: int=0) -> str :
     device = f"cuda:{pref_gpu}" if is_gpu else "cpu"
 
     if is_gpu :
-        print("Nombre de GPU :", torch.cuda.device_count())
+        if verb : print("Nombre de GPU :", torch.cuda.device_count())
         if pref_gpu>=torch.cuda.device_count() : 
             pref_gpu = 0
-            print(f"{pref_gpu} gpu is not available. Switched on gpu0")
+            if verb : print(f"{pref_gpu} gpu is not available. Switched on gpu0")
 
         for i in range(torch.cuda.device_count()):
-            print(f"\n[ GPU {i} ]")
-            print("Nom :", torch.cuda.get_device_name(i))
-            print("Mémoire totale :", round(torch.cuda.get_device_properties(i).total_memory / 1e9, 2), "Go")
-            print("Mémoire utilisée :", round(torch.cuda.memory_allocated(i) / 1e9, 2), "Go")
-            print("Mémoire réservée :", round(torch.cuda.memory_reserved(i) / 1e9, 2), "Go")
+            if verb:
+                print(f"\n[ GPU {i} ]")
+                print("Nom :", torch.cuda.get_device_name(i))
+                print("Mémoire totale :", round(torch.cuda.get_device_properties(i).total_memory / 1e9, 2), "Go")
+                print("Mémoire utilisée :", round(torch.cuda.memory_allocated(i) / 1e9, 2), "Go")
+                print("Mémoire réservée :", round(torch.cuda.memory_reserved(i) / 1e9, 2), "Go")
 
     print(f"current device is {torch.cuda.current_device()}")
     return device, is_gpu
  
 
 ############### merge plots
-def merge_images(save_gen_path, save_gen_s_path, save_gen_t_path):
-    images = [Image.open(path) for path in [save_gen_path, save_gen_s_path, save_gen_t_path]]
-    labels = ["generation", "gen_s", "gen_t"]
-    widths = [img.width for img in images]
-    assert all(w == widths[0] for w in widths)
+from PIL import Image, ImageDraw, ImageFont
+import numpy as np
+import os
 
-    font_size = 20
+def merge_images(*image_paths, labels=None, font_size=20, separator_height=10):
+    """
+    Merge un nombre arbitraire d'images verticalement, avec un titre centré au-dessus de chacune.
+
+    Utilisation :
+        - merge_images(p1, p2, p3, labels=["gen", "s", "t"])
+        - merge_images([p1, p2, p3], labels=[...])  # liste unique aussi gérée
+    """
+
+    # Autoriser un appel de type merge_images([p1, p2, p3], labels=...)
+    if len(image_paths) == 1 and isinstance(image_paths[0], (list, tuple)):
+        image_paths = list(image_paths[0])
+
+    if labels is None:
+        # par défaut : nom du fichier sans extension
+        labels = [os.path.splitext(os.path.basename(p))[0] for p in image_paths]
+
+    assert len(image_paths) == len(labels), "len(labels) doit == len(image_paths)"
+
+    images = [Image.open(path) for path in image_paths]
+    widths = [img.width for img in images]
+    assert all(w == widths[0] for w in widths), "Toutes les images doivent avoir la même largeur"
+
+    # Police
     try:
         font = ImageFont.truetype("arial.ttf", font_size)
     except IOError:
         font = ImageFont.load_default()
+
     text_height = font_size + 10
-    separator_height = 10
-    separator = Image.fromarray(np.zeros((separator_height, widths[0], 3), dtype=np.uint8))
+
+    # Séparateur noir entre les blocs
+    separator = Image.fromarray(
+        np.zeros((separator_height, widths[0], 3), dtype=np.uint8)
+    )
 
     final_parts = []
     for i, (img, label) in enumerate(zip(images, labels)):
+        # Bandeau de texte
         text_img = Image.new("RGB", (widths[0], text_height), color=(0, 0, 0))
         draw = ImageDraw.Draw(text_img)
         text_width = draw.textlength(label, font=font)
-        draw.text(((widths[0] - text_width) // 2, 5), label, fill=(255, 255, 255), font=font)
+        draw.text(
+            ((widths[0] - text_width) // 2, 5),
+            label,
+            fill=(255, 255, 255),
+            font=font,
+        )
+
         final_parts.append(text_img)
         final_parts.append(img)
+
         if i != len(images) - 1:
             final_parts.append(separator)
 
@@ -276,8 +326,9 @@ def merge_images(save_gen_path, save_gen_s_path, save_gen_t_path):
     for part in final_parts:
         final_image.paste(part, (0, y))
         y += part.height
-    
+
     return final_image
+
 
 def merge_images_with_black_gap(image_paths, gap=10):
     images = [Image.open(p) for p in image_paths]

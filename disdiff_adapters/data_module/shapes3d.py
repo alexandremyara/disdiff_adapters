@@ -69,10 +69,10 @@ class Shapes3DDataModule(LightningDataModule) :
         else : return self.loader
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=16)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=16, shuffle=True)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=16)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=16, shuffle=True)
     
     def set_dataloader(self, loader: DataLoader|None) :
         self.loader = loader

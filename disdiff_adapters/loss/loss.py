@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 
 def kl(mu: torch.Tensor, logvar: torch.Tensor, by_latent: bool=False) -> torch.Tensor:
-    
+    logvar = torch.clamp(logvar, min=-20.0, max=20.0)
     if by_latent:
         return -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).mean(dim=0)
     else:
@@ -32,7 +32,7 @@ def cross_cov(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
 
 
 def decorrelate_params(mu_s, logvar_s, mu_t, logvar_t,):
-    return torch.norm(cross_cov(mu_s, mu_t), p="fro")
+    return torch.clip(torch.norm(cross_cov(mu_s, mu_t), p="fro"), min=-1, max=1)
 
     
 #InfoNCE supervised
@@ -81,6 +81,6 @@ class InfoNCESupervised(nn.Module) :
         assert not torch.isnan(log_numer).any(), "log_numer is nan"
 
         loss = -(log_numer - log_denom) 
-        return loss.mean()
+        return torch.clip(loss.mean(), max=1e5)
 
         #return loss.mean()

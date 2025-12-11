@@ -15,6 +15,9 @@ from disdiff_adapters.utils import *
 from disdiff_adapters.loss import *
 from disdiff_adapters.data_module import *
 
+from os.path import join
+from disdiff_adapters.utils import LOG_DIR
+
 SEED = 2025
 
 def to_list(x: str) -> list[str] :
@@ -96,10 +99,10 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--key",
+        "--experience",
         type=str,
         default="",
-        help="key to add for the file"
+        help="Name of the experience"
     )
 
     parser.add_argument(
@@ -108,6 +111,13 @@ def parse_args() -> argparse.Namespace:
         default="0",
         help="comma seperated list of gpus"
     )
+
+    parser.add_argument(
+        "--version_model",
+        type=str,
+        default="debug"
+    )
+    
     return parser.parse_args()
 
 def main(flags: argparse.Namespace) :
@@ -159,7 +169,7 @@ def main(flags: argparse.Namespace) :
                     latent_dim=flags.latent_dim)
         model_name = "ae"
     
-    version=f"{model_name}_epoch={flags.max_epochs}_beta={flags.beta}_latent={flags.latent_dim}_warm_up={warm_up}_lr={flags.lr}_batch={flags.batch_size}_arch={flags.arch}+{flags.key}"
+    version=f"{model_name}_epoch={flags.max_epochs}_beta={flags.beta}_latent={flags.latent_dim}_warm_up={warm_up}_lr={flags.lr}_batch={flags.batch_size}_arch={flags.arch}"
     print(f"\nVERSION : {version}\n")
 
     trainer = Trainer(
@@ -171,8 +181,8 @@ def main(flags: argparse.Namespace) :
             log_every_n_steps=10,
 
             logger=TensorBoardLogger(
-                save_dir=LOG_DIR+f"/{model_name}",
-                name=flags.dataset,
+                save_dir=LOG_DIR+f"/{flags.version_model}",
+                name=join(flags.dataset, flags.experience),
                 version=version,
                 default_hp_metric=False,
             ),

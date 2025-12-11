@@ -20,7 +20,7 @@ sys.path.append("/projects/compures/alexandre/disdiff_adapters/")
 print(sys.path)
 
  
-from disdiff_adapters.arch.multi_distillme import MultiDistillMeModule
+from disdiff_adapters.arch.multi_distillme.x_ab_s import Xfactors
 from disdiff_adapters.arch.vae.block import SimpleConv, ResidualBlock
 from disdiff_adapters.utils import *
 from disdiff_adapters.loss import *
@@ -28,8 +28,18 @@ from disdiff_adapters.data_module import *
 
 SEED = 2025
 
-def to_list(x: str) -> list[str] :
-    return [int(gpu_id) for gpu_id in x.split(",")]
+def to_list(x: str) -> list[int] :
+    return [int(elt) for elt in x.split(",")]
+
+def to_list_float(x: str) -> list[float] :
+    return [float(elt) for elt in x.split(",")]
+
+def list_to_str(l:list) -> str:
+    s = ""
+    for elt in l :
+        s+=str(elt)
+        s+=","
+    return s[:-1]
 
 def parse_args() -> argparse.Namespace:
     """
@@ -57,34 +67,6 @@ def parse_args() -> argparse.Namespace:
         help="Max number of epochs.",
         default=50,
     )
-    
-    parser.add_argument(
-        "--beta_s",
-        type=float,
-        help="beta used",
-        default=1.0,
-    )    
-    
-    parser.add_argument(
-        "--beta_t",
-        type=float,
-        help="beta used",
-        default=1.0,
-    )    
-    
-    parser.add_argument(
-        "--latent_dim_s",
-        type=int,
-        help="dimension of the latent space",
-        default=4
-    )
-    
-    parser.add_argument(
-        "--latent_dim_t",
-        type=int,
-        help="dimension of the latent space",
-        default=4
-    )
 
     parser.add_argument(
         "--batch_size",
@@ -105,12 +87,19 @@ def parse_args() -> argparse.Namespace:
         default=10e-5,
         help="learning rate."
     )
-
+    
     parser.add_argument(
-        "--factor",
-        type=int,
-        default=0,
-        help="Choose a factor to encode"
+        "--beta_t",
+        type=float,
+        help="beta used",
+        default=1.0,
+    )    
+    
+    parser.add_argument(
+        "--dims_by_factors",
+        type=to_list,
+        help="dimension of the latent space t",
+        default="2"
     )
 
     parser.add_argument(
@@ -142,9 +131,9 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--l_nce",
-        type=float,
-        default=1e-3,
+        "--l_nce_by_factors",
+        type=to_list_float,
+        default="1e-2",
         help="use nce loss"
     )
 
@@ -192,11 +181,6 @@ def main(flags: argparse.Namespace) :
 
     # Load data_module
     match flags.dataset:
-        case "bloodmnist":
-            data_module = BloodMNISTDataModule(batch_size=flags.batch_size)
-            in_channels = 3
-            img_size = 28
-            klw = 0.0001
         
         case "dsprites":
             data_module = DSpritesDataModule(batch_size=flags.batch_size)
@@ -205,7 +189,10 @@ def main(flags: argparse.Namespace) :
             img_size = 64
             klw = 0.000001
             factor_value = -1
-            select_factor = 0
+            n=5-1
+            dims_by_factors = n*[2]
+            select_factors = [k for k in range(n)]
+            l_nce_by_factors = n*[(1/n)*0.1]
 
         case "mpi3d":
             data_module = MPI3DDataModule(batch_size=flags.batch_size)
@@ -214,7 +201,10 @@ def main(flags: argparse.Namespace) :
             img_size = 64
             klw = 0.000001
             factor_value = -1
-            select_factor = 1
+            n=7-1
+            dims_by_factors = n*[2]
+            select_factors = [k for k in range(n)]
+            l_nce_by_factors = n*[(1/n)*0.1]
 
         case "shapes":
             data_module = Shapes3DDataModule(batch_size=flags.batch_size)
@@ -223,8 +213,10 @@ def main(flags: argparse.Namespace) :
             img_size = 64
             klw = 0.000001
             factor_value = -1
-            select_factor = 0
-            #klw = flags.batch_size/(3*1e5)
+            n=6-1
+            dims_by_factors = n*[2]
+            select_factors = [k for k in range(n)]
+            l_nce_by_factors = n*[(1/n)*0.1]
         
         case "celeba":
             data_module = CelebADataModule(batch_size=flags.batch_size)
@@ -233,35 +225,36 @@ def main(flags: argparse.Namespace) :
             img_size = 64
             klw = 0.000001
             factor_value = 1
-            select_factor = 26
+            n=3
+            dims_by_factors = n*[2]
+            select_factors = [0, 15, 26]
+            l_nce_by_factors = n*[(1/n)*0.1]
         case _ :
             raise ValueError("Error flags.dataset")
         
     map_idx_labels = param_class.Params.FACTORS_IN_ORDER
-
-    model = MultiDistillMeModule(in_channels = in_channels,
+    print(f"dims_by_factors: {sum(flags.dims_by_factors)}")
+    model = Xfactors(in_channels = in_channels,
                 img_size=img_size,
-                latent_dim_s=flags.latent_dim_s, 
-                latent_dim_t=flags.latent_dim_t,
-                select_factor=select_factor,
+                dims_by_factors=dims_by_factors,
+                select_factors=select_factors,
                 factor_value=factor_value,
                 res_block=res_block,
-                beta_s=flags.beta_s,
                 beta_t=flags.beta_t,
                 warm_up=warm_up,
                 kl_weight=klw,
                 type=flags.loss_type,
                 l_cov=flags.l_cov,
-                l_nce=flags.l_nce,
+                l_nce_by_factors=l_nce_by_factors,
                 l_anti_nce=flags.l_anti_nce,
                 map_idx_labels=map_idx_labels,
                 temp=0.03)
     
-    model_name = "md"
-    
-    version=f"{model_name}_epoch={flags.max_epochs}_beta=({flags.beta_s},{flags.beta_t})_latent=({flags.latent_dim_s},{flags.latent_dim_t})_batch={flags.batch_size}_warm_up={warm_up}_lr={flags.lr}_arch={flags.arch}+l_cov={flags.l_cov}+l_nce={flags.l_nce}+l_anti_nce={flags.l_anti_nce}_{flags.key}" 
+    model_name = "x_ab_s"
+
+    version=f"{model_name}_epoch={flags.max_epochs}_beta=({flags.beta_t})_latent=({list_to_str(flags.dims_by_factors)})_batch={flags.batch_size}_warm_up={warm_up}_lr={flags.lr}_arch={flags.arch}+l_cov={flags.l_cov}+l_nce={list_to_str(flags.l_nce_by_factors)}+l_anti_nce={flags.l_anti_nce}_{flags.key}" 
     print(f"\nVERSION : {version}\n")
-    print(f"Select factor : {select_factor}, factor value : {factor_value}")
+    print(f"Select factor : {select_factors}, factor value : {factor_value}")
 
     logger=TensorBoardLogger(
                 save_dir=LOG_DIR+f"/{flags.version_model}",

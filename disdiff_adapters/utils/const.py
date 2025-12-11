@@ -28,17 +28,25 @@ class Shapes3D :
         
         NUM_VALUES_PER_FACTOR = {'floor_hue': 10, 'wall_hue': 10, 'object_hue': 10, 
                             'scale': 8, 'shape': 4, 'orientation': 15}
-
+        
 @dataclass
-class ChAda :
+class MPI3D :
 
     @dataclass
     class Path :
-        WEIGHTS = join(PROJECT_PATH, "disdiff_adapters/arch/chada/weights.ckpt")
-
+        H5 = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/3dshapes.h5")
+        NPZ = join(PROJECT_PATH, "disdiff_adapters/data/mpi3d/mpi3d_toy.npz")
+        TRAIN = join(PROJECT_PATH, "disdiff_adapters/data/mpi3d/mpi3d_train.npz")
+        VAL = join(PROJECT_PATH, "disdiff_adapters/data/mpi3d/mpi3d_val.npz")
+        TEST = join(PROJECT_PATH, "disdiff_adapters/data/mpi3d/mpi3d_test.npz")
     @dataclass
-    class Config :
-        BASE: ClassVar[dict[str, int|bool]] = {"patch_size": 16, "embed_dim": 192, "return_all_tokens": False, "max_number_channels": 10}
+    class Params :
+        FACTORS_IN_ORDER = ['object_color', 'object_shape', 'object_size', 'camera_height', 'background_color',
+                        'horizontal_axis', "vertical_axis"]
+        
+        NUM_VALUES_PER_FACTOR = {'object_color': 6, 'object_shape': 6, 'object_size': 2, 
+                            'camera_height': 3, 'background_color': 3, 'horizontal_axis': 40,
+                            "vertical_axis":40}
 
 @dataclass
 class BloodMNIST :
@@ -66,6 +74,14 @@ class CelebA :
         DATA = "/projects/compures/alexandre/PyTorch-VAE/Data/"
         BUFF_IMG = join(PROJECT_PATH, "disdiff_adapters/data/celeba/images_train_buff.pt")
         BUFF_LABELS = join(PROJECT_PATH, "disdiff_adapters/data/celeba/labels_train_buff.pt")
+        ## None
+        H5 = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/3dshapes.h5")
+        TRAIN = join(PROJECT_PATH, "disdiff_adapters/data/celeba/celeba_train.npz")
+        VAL = join(PROJECT_PATH, "disdiff_adapters/data/celeba/celeba_val.npz")
+        TEST = join(PROJECT_PATH, "disdiff_adapters/data/celeba/celeba_test.npz")
+        NPZ = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/split_3dshapes.npz")
+        BUFF_IMG = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/images_train_buff.pt")
+        BUFF_LABELS = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/labels_train_buff.pt")
 
     class Params : 
         FACTORS_IN_ORDER = [

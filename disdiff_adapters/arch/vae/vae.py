@@ -176,7 +176,7 @@ class VAEModule(LightningModule) :
     def on_train_epoch_end(self):
         epoch = self.current_epoch
 
-        if epoch % 10 == 0:
+        if epoch % 1 == 0:
             self.show_reconstruct(self.images_train_buff)
 
             try : os.mkdir(os.path.join(self.logger.log_dir, f"epoch_{epoch}"))
