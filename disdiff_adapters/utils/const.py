@@ -126,6 +126,19 @@ class CelebA :
         "Wearing_Necktie",    # 38
         "Young",              # 39
     ]     
+    
+        REPRESENTANT = [
+        "Bald",               # 4
+        "Eyeglasses",         # 15
+        "Heavy_Makeup",       # 18
+        "No_Beard",           # 24
+        "Pale_Skin",          # 26
+        "Smiling",            # 31
+        "Wearing_Hat",        # 35
+    ]
+
+        REPRESENTANT_IDX = [
+        4, 15, 18, 24, 26, 31, 35]
 
 @dataclass
 class MNIST:
@@ -152,3 +165,19 @@ class DSprites:
         
         NUM_VALUES_PER_FACTOR = {'shape': 3, 'scale': 6, 
                             'orientation': 40, 'pos_x': 32, 'pos_y': 32}
+        
+@dataclass
+class Cars3D:
+    @dataclass
+    class Path :
+        CACHE = join(PROJECT_PATH, "disdiff_adapters/data/cars3d_cache/")
+        LOCAL = join(PROJECT_PATH, "disdiff_adapters/data/cars3d")
+        TRAIN = join(PROJECT_PATH, "disdiff_adapters/data/cars3d/cars3d_train.npz")
+        VAL = join(PROJECT_PATH, "disdiff_adapters/data/cars3d/cars3d_val.npz")
+        TEST = join(PROJECT_PATH, "disdiff_adapters/data/cars3d/cars3d_test.npz")
+
+    @dataclass
+    class Params :
+        FACTORS_IN_ORDER = ["identity", "elevation_angle", "azimuth_angle"]
+        
+        NUM_VALUES_PER_FACTOR = {"identity": 183, "elevation_angle": 4, "azimuth_angle": 24}

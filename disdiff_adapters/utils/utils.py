@@ -148,6 +148,24 @@ def del_outliers(arr: np.ndarray, k: int) -> np.ndarray:
     arr[idxs] = 0
     return arr
 
+
+def hex_to_rgb01(h):
+    h = h.lstrip("#")
+    return np.array([int(h[i:i+2], 16) for i in (0, 2, 4)]) / 255.0
+
+def rgb01_to_hex(rgb):
+    rgb = np.clip(np.array(rgb) * 255.0, 0, 255).astype(int)
+    return "#{:02x}{:02x}{:02x}".format(rgb[0], rgb[1], rgb[2])
+
+def interpolate_hex_palette(base_hex_colors, n_out):
+    """Interpole linéairement une palette hex (RGB) vers n_out couleurs."""
+    base = np.stack([hex_to_rgb01(c) for c in base_hex_colors], axis=0)  # [N,3]
+    x_base = np.linspace(0.0, 1.0, len(base_hex_colors))
+    x_out = np.linspace(0.0, 1.0, n_out)
+    out = np.stack([np.interp(x_out, x_base, base[:, ch]) for ch in range(3)], axis=1)  # [n_out,3]
+    return [rgb01_to_hex(out[i]) for i in range(n_out)]
+
+
 def display_latent(labels: torch.Tensor, 
                mu_logvars: None|tuple[torch.Tensor]=None,
                z: None|torch.Tensor=None,
@@ -171,30 +189,47 @@ def display_latent(labels: torch.Tensor,
 
     unique_labels = labels.unique(sorted=True).detach().cpu().numpy()
     K = len(unique_labels)
-    if K== 10 :
-        colors = ["red","orange", "yellow", "lightgreen", "green", "lightblue", "darkblue", "royalblue", "purple", "pink"]
-        cmap = ListedColormap(colors, name="mycats")
-        bounds = np.concatenate([unique_labels - 0.5, [unique_labels[-1] + 0.5]])
-        norm = BoundaryNorm(bounds, cmap.N, clip=True)
-        print("\ncmap : personalised\n")
-    elif K<10 : cmap = plt.get_cmap('tab10', K)
-    else : 
-        colors = [
-    '#ff0000', '#ff1f00', '#ff3d00', '#ff5c00', '#ff7a00',
-    '#ff9900', '#ffb800', '#ffd600', '#fff500', '#ebff00',
-    '#ccff00', '#aeff00', '#8fff00', '#70ff00', '#52ff00',
-    '#33ff00', '#14ff00', '#00ff0a', '#00ff29', '#00ff47',
-    '#00ff66', '#00ff85', '#00ffa3', '#00ffc2', '#00ffe0',
-    '#00ffff', '#00e0ff', '#00c2ff', '#00a3ff', '#0085ff',
-    '#0066ff', '#0047ff', '#0029ff', '#000aff', '#1400ff',
-    '#3300ff', '#5200ff', '#7000ff', '#8f00ff', '#ae00ff',
-    '#cc00ff', '#eb00ff', '#ff00f5', '#ff00d6', '#ff00b8',
-    '#ff0099', '#ff007a', '#ff005c', '#ff003d', '#ff001f'][:K]
-        cmap = ListedColormap(colors, name="mycats")
-        bounds = np.concatenate([unique_labels - 0.5, [unique_labels[-1] + 0.5]])
-        norm = BoundaryNorm(bounds, cmap.N, clip=True)
 
-        
+    # --- palettes
+    colors10 = ["red","orange","yellow","lightgreen","green","lightblue","darkblue","royalblue","purple","pink"]
+
+    base50 = [
+        '#ff0000', '#ff1f00', '#ff3d00', '#ff5c00', '#ff7a00',
+        '#ff9900', '#ffb800', '#ffd600', '#fff500', '#ebff00',
+        '#ccff00', '#aeff00', '#8fff00', '#70ff00', '#52ff00',
+        '#33ff00', '#14ff00', '#00ff0a', '#00ff29', '#00ff47',
+        '#00ff66', '#00ff85', '#00ffa3', '#00ffc2', '#00ffe0',
+        '#00ffff', '#00e0ff', '#00c2ff', '#00a3ff', '#0085ff',
+        '#0066ff', '#0047ff', '#0029ff', '#000aff', '#1400ff',
+        '#3300ff', '#5200ff', '#7000ff', '#8f00ff', '#ae00ff',
+        '#cc00ff', '#eb00ff', '#ff00f5', '#ff00d6', '#ff00b8',
+        '#ff0099', '#ff007a', '#ff005c', '#ff003d', '#ff001f'
+    ]
+
+    # --- choix cmap
+    if K == 10:
+        cmap = ListedColormap(colors10, name="mycats10")
+        print("\ncmap : personalised (10)\n")
+
+    elif K < 10:
+        # tab10 discret mais on garde un norm basé sur tes labels réels
+        cmap = plt.get_cmap("tab10", K)
+
+    elif K <= 50:
+        cmap = ListedColormap(base50[:K], name="mycats50")
+
+    elif K <= 200:
+        colors200 = interpolate_hex_palette(base50, 200)
+        cmap = ListedColormap(colors200[:K], name="mycats200")
+
+    else:
+        # fallback si jamais >200
+        cmap = plt.get_cmap("hsv", K)
+
+    # --- norm/bounds (important si labels ne sont pas 0..K-1)
+    bounds = np.concatenate([unique_labels - 0.5, [unique_labels[-1] + 0.5]])
+    norm = BoundaryNorm(bounds, cmap.N, clip=True)
+            
 
     if z is None :
         z = sample_from(mu_logvars, test=test)

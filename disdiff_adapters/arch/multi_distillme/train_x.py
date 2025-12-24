@@ -203,10 +203,12 @@ def main(flags: argparse.Namespace) :
             img_size = 64
             klw = 0.000001
             factor_value = -1
+            factor_value_1 = -1
             n=5-1
             dims_by_factors = n*[2]
             select_factors = [k for k in range(n)]
             l_nce_by_factors = n*[(1/n)*0.1]
+            binary_factor = False
 
         case "mpi3d":
             data_module = MPI3DDataModule(batch_size=flags.batch_size)
@@ -215,10 +217,12 @@ def main(flags: argparse.Namespace) :
             img_size = 64
             klw = 0.000001
             factor_value = -1
+            factor_value_1 = -1
             n=7-1
             dims_by_factors = n*[2]
             select_factors = [k for k in range(n)]
             l_nce_by_factors = n*[(1/n)*0.1]
+            binary_factor = False
 
         case "shapes":
             data_module = Shapes3DDataModule(batch_size=flags.batch_size)
@@ -227,10 +231,13 @@ def main(flags: argparse.Namespace) :
             img_size = 64
             klw = 0.000001
             factor_value = -1
+            factor_value_1 = -1
             n=6-1
             dims_by_factors = n*[2]
             select_factors = [k for k in range(n)]
             l_nce_by_factors = n*[(1/n)*0.1]
+            binary_factor = False
+        
         
         case "celeba":
             data_module = CelebADataModule(batch_size=flags.batch_size)
@@ -239,10 +246,27 @@ def main(flags: argparse.Namespace) :
             img_size = 64
             klw = 0.000001
             factor_value = 1
-            n=3
+            factor_value_1 = 0
+            select_factors = CelebA.Params.REPRESENTANT_IDX
+            n=len(select_factors)
             dims_by_factors = n*[2]
-            select_factors = [0, 15, 26]
             l_nce_by_factors = n*[(1/n)*0.1]
+            binary_factor = True
+
+        case "cars3d":
+            data_module = Cars3DDataModule(batch_size=flags.batch_size)
+            param_class = Cars3D
+            in_channels = 3
+            img_size = 128
+            klw = 0.000001
+            factor_value = -1
+            factor_value_1 = -1
+            n=3-1
+            dims_by_factors = n*[2]
+            select_factors = [k for k in range(n)]
+            l_nce_by_factors = n*[(1/n)*0.1]
+            binary_factor = False
+
         case _ :
             raise ValueError("Error flags.dataset")
         
@@ -254,6 +278,7 @@ def main(flags: argparse.Namespace) :
                 dims_by_factors=dims_by_factors,
                 select_factors=select_factors,
                 factor_value=factor_value,
+                factor_value_1=factor_value_1,
                 res_block=res_block,
                 beta_s=flags.beta_s,
                 beta_t=flags.beta_t,
@@ -264,7 +289,8 @@ def main(flags: argparse.Namespace) :
                 l_nce_by_factors=l_nce_by_factors,
                 l_anti_nce=flags.l_anti_nce,
                 map_idx_labels=map_idx_labels,
-                temp=0.03)
+                temp=0.03,
+                binary_factor = binary_factor)
     
     model_name = "x"
 

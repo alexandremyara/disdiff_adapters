@@ -5,13 +5,13 @@
             "name": "disdiff",
             "type": "debugpy",
             "request": "launch",
-            "program": "disdiff_adapters/arch/multi_distillme/train.py",
+            "program": "disdiff_adapters/arch/multi_distillme/train_x.py",
             "args": [
                 "--latent_dim_t=2",
-                "--latent_dim_s=16",
+                "--latent_dim_s=126",
                 "--beta_s=100",
-                "--dataset=dsprites",
-                "--loss_type=vae",
+                "--dataset=celeba",
+                "--loss_type=all",
             ],
             "console": "integratedTerminal"
         },

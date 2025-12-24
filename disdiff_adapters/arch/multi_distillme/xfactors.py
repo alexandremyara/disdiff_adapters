@@ -66,6 +66,9 @@ class Xfactors(LightningModule) :
 ### TO DO
 ## Permettre de séléctionner des factor_value pour plusieurs facteurs
 ## Adapter ça dans generate_cond
+## L'idéee est que lorsque qu'on génère selon le facteurs deux choses se fassent :
+## - L'image de référence soit une fois à 0 et une fois à 1
+## - Le sampling de l'espace ait une chance sur 2 de choisir 0/1
 
 
     def __init__(self,
@@ -85,7 +88,9 @@ class Xfactors(LightningModule) :
                  l_anti_nce: float=0.0,
                  temp: float=0.07,
                  factor_value=-1,
-                 map_idx_labels: list|None= None) :
+                 factor_value_1=-1,
+                 map_idx_labels: list|None= None,
+                 binary_factor: bool=False) :
         
         super().__init__()
         assert len(l_nce_by_factors) == len(dims_by_factors) and len(dims_by_factors) == len(select_factors)
@@ -259,7 +264,7 @@ class Xfactors(LightningModule) :
         return x_hat_logits
 
     def generate_by_factors(self, cond: int, nb_samples: int=16, pos: int=0, z_t=None, z_s=None, is_val=False,
-                            img_ref=None, factor_value=-1) :
+                            img_ref=None, factor_value=-1, binary_factor: bool=False) :
         assert (z_t is None) == (z_s is None), "You must specified z_s and z_t, or none of them"
         assert cond in self.hparams.select_factors, f"Impossible to generate with cond: {cond}. The factor is not followed."
 
@@ -268,32 +273,61 @@ class Xfactors(LightningModule) :
         buff_labels = self.labels_val_buff if is_val else self.labels_train_buff
         buff_imgs = self.images_val_buff if is_val else self.images_train_buff
 
+        #Set start/end
+        i = self.hparams.select_factors.index(cond)
+        start = sum(self.hparams.dims_by_factors[:i])
+        end = start+self.hparams.dims_by_factors[i]
+
         if z_t is None : 
-            z_t= buff_latents["t"]
             z_s = buff_latents["s"]
+            z_t = buff_latents["t"]
+
+            z_t_left = z_t[:, :start]
+            z_t_right = z_t[:, end:]
         else : print("interactive mode : on")
 
         #If a factor_value should be represented, we mask the latent space to select the correct value
         if factor_value != -1 :
             mask = (buff_labels[:, cond] == factor_value)
-            if cond == "s" : z_t = z_t[mask]
-            else : z_s = z_s[mask]
+            z_s = z_s[mask]
+            z_t_left = z_t_left[mask]
+            z_t_right = z_t_right[mask]
+
+            # if cond == "s" : z_t = z_t[mask]
+            # else : z_s = z_s[mask]
         else : mask = torch.ones(z_t.size(0), dtype=bool)
-        if pos>=len(mask) : pos=0
-        i = self.hparams.select_factors.index(cond)
-        start = sum(self.hparams.dims_by_factors[:i])
-        end = start+self.hparams.dims_by_factors[i]
+        if pos>=len(mask) : pos=torch.randint(low=0, high=len(mask), size=(1,)).item()
 
         nb_sample_latent = z_t.shape[0]
         assert nb_samples <= nb_sample_latent, "Too much points"
 
-        idx_cond = torch.randint_like(torch.zeros([nb_samples]), high=nb_sample_latent, dtype=torch.int32)
+        if binary_factor:
+            idx0_all = torch.where(buff_labels[:, cond] == 0)[0]
+            idx1_all = torch.where(buff_labels[:, cond] == 1)[0]
+            n0 = nb_samples // 2
+            n1 = nb_samples - n0 
+
+            if idx0_all.numel() == 0 and idx1_all.numel() == 0:
+                raise ValueError(f"Empty cond={cond} (0 nor 1).")
+
+            if idx0_all.numel() == 0: #if no cond=0 found
+                idx_cond = idx1_all[torch.randint(0, idx1_all.numel(), (nb_samples,), dtype=torch.long)]
+            elif idx1_all.numel() == 0: #if no cond=1 found
+                idx_cond = idx0_all[torch.randint(0, idx0_all.numel(), (nb_samples,), dtype=torch.long)]
+            else:
+                pick0 = idx0_all[torch.randint(0, idx0_all.numel(), (n0,), dtype=torch.long)]
+                pick1 = idx1_all[torch.randint(0, idx1_all.numel(), (n1,), dtype=torch.long)]
+                idx_cond = torch.cat([pick0, pick1], dim=0)
+                idx_cond = idx_cond[torch.randperm(nb_samples)]
+
+        else: 
+            idx_cond = torch.randint_like(torch.zeros([nb_samples]), high=nb_sample_latent, dtype=torch.int32)
         eps_cond = z_t[idx_cond, start:end].to(self.device)
 
         if img_ref is None :
             eps_s = torch.stack(nb_samples*[z_s[pos]]).to(self.device)
-            eps_t_left = torch.stack(nb_samples*[z_t[pos, :start]]).to(self.device)
-            eps_t_right = torch.stack(nb_samples*[z_t[pos, end:]]).to(self.device)
+            eps_t_left = torch.stack(nb_samples*[z_t_left[pos]]).to(self.device)
+            eps_t_right = torch.stack(nb_samples*[z_t_right[pos]]).to(self.device)
         else : 
             with torch.no_grad() : _, _, _, eps_s, eps_full_t, _ = self(img_ref.to(self.device), test=True)
             eps_s = torch.cat(nb_samples*[eps_s]).to(self.device)
@@ -404,6 +438,7 @@ class Xfactors(LightningModule) :
 
     def on_train_epoch_end(self):
         epoch = self.current_epoch
+        if self.global_rank != 0: return
 
         if epoch % 1 == 0:
             try : os.mkdir(os.path.join(self.logger.log_dir, f"epoch_{epoch}"))
@@ -424,9 +459,6 @@ class Xfactors(LightningModule) :
 
             self.log_gen_images()
 
-            path_heatmap = join(self.logger.log_dir, f"epoch_{epoch}", f"cov_{epoch}.png")
-            log_cross_cov_heatmap(*mus_logvars_s, *mus_logvars_t, save_path=path_heatmap)
-
             ### latent space
             self.log_latent()
             # self.log_factorvae()
@@ -435,6 +467,8 @@ class Xfactors(LightningModule) :
         self.current_val_batch = 0
 
     def on_validation_epoch_end(self) :
+        if getattr(self.trainer, "sanity_checking", False): return
+        if self.global_rank != 0: return
         epoch = self.current_epoch
 
         if epoch % 1 == 0:
@@ -509,8 +543,10 @@ class Xfactors(LightningModule) :
 
         for cond in self.hparams.select_factors :
             for i in range(4) :
-                factor_value = self.hparams.factor_value if i%2 else -1
-                images_cond_f_gen, input_s = self.generate_by_factors(cond=cond, pos=i, factor_value=factor_value, is_val=is_val)
+                factor_value = self.hparams.factor_value if i%2 else self.hparams.factor_value_1
+                pos = torch.randint(low=0, high=min(len(self.latent_val_buff), len(self.latent_train_buff)), size=(1,)).item()
+
+                images_cond_f_gen, input_s = self.generate_by_factors(cond=cond, pos=pos, factor_value=factor_value, is_val=is_val, binary_factor=self.hparams.binary_factor)
                 images_cond_f_gen_ref = torch.cat([images_cond_f_gen.detach().cpu(), input_s])
                 save_gen_f_path = join(self.logger.log_dir, f"epoch_{epoch}", f"gen_f={cond}_{epoch}_{i}.png")
                 if is_val : save_gen_f_path = join(self.logger.log_dir, f"epoch_{epoch}", "val" ,f"gen_f={cond}_{epoch}_{i}.png")

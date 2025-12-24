@@ -234,6 +234,16 @@ def main(flags: argparse.Namespace) :
             klw = 0.000001
             factor_value = 1
             select_factor = 26
+
+        case "cars3d":
+            data_module = Cars3DDataModule(batch_size=flags.batch_size)
+            param_class = Cars3D
+            in_channels = 3
+            img_size = 128
+            klw = 0.000001
+            factor_value = -1
+            select_factor = 1
+
         case _ :
             raise ValueError("Error flags.dataset")
         
