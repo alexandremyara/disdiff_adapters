@@ -257,13 +257,13 @@ def main(flags: argparse.Namespace) :
             data_module = Cars3DDataModule(batch_size=flags.batch_size)
             param_class = Cars3D
             in_channels = 3
-            img_size = 128
+            img_size = 64
             klw = 0.000001
             factor_value = -1
             factor_value_1 = -1
-            n=3-1
+            n=2
             dims_by_factors = n*[2]
-            select_factors = [k for k in range(n)]
+            select_factors = [1, 2]
             l_nce_by_factors = n*[(1/n)*0.1]
             binary_factor = False
 

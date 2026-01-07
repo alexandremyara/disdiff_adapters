@@ -64,6 +64,8 @@ def display(batch: tuple[torch.Tensor]) -> None:
     batch = (images [B,3,H,W], labels [B,])
     """
     images, labels = batch
+    if not isinstance(images, torch.Tensor) : images = torch.from_numpy(images)
+    if not isinstance(labels, torch.Tensor) : labels = torch.from_numpy(labels)
     nb_samples = images.size(0)
 
     # grille quasi carrée

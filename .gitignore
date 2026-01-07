@@ -8,9 +8,7 @@
 .python-version*
 .env
 disdiff_adapters/logs/*
-**/scripts/*
 **/out/*
 **/PyTorch-VAE/*
-**/notebook/*
 **/lightning_logs/*
 **/data/*

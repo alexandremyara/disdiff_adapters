@@ -239,7 +239,7 @@ def main(flags: argparse.Namespace) :
             data_module = Cars3DDataModule(batch_size=flags.batch_size)
             param_class = Cars3D
             in_channels = 3
-            img_size = 128
+            img_size = 64
             klw = 0.000001
             factor_value = -1
             select_factor = 1

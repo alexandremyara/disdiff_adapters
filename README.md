@@ -63,6 +63,10 @@ Depuis le terminal une fois placé dans le dossier script/train/
 Il est possible de lancer ./sweep_x.sh $\beta_{s_1}, \ldots, \beta_{s_k}$  
 $k$ entrainements se lancent sur le gpu sélectionné via tmux. Chaque fenêtre tmux entraine le modèle avec un $\beta_s$ différent (possible de mettre un seul $\beta_s$).
 
+**NB: Dans le terminal lorsque les $\beta_s$ sont renseignés, il est nécessaire de mettre l'argument en tant que floatant.**
+Exemple: ./sweep_x.sh 1.0 100.0 500.0
+Et jamais: ./sweep_x.sh 1 100 500
+
 ## Naviguer dans le dossier logs
 Le dossier logs peut être profond dans l'arborescence, voici comment elle fonctionne.
 

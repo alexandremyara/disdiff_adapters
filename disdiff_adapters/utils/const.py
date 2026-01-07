@@ -175,6 +175,7 @@ class Cars3D:
         TRAIN = join(PROJECT_PATH, "disdiff_adapters/data/cars3d/cars3d_train.npz")
         VAL = join(PROJECT_PATH, "disdiff_adapters/data/cars3d/cars3d_val.npz")
         TEST = join(PROJECT_PATH, "disdiff_adapters/data/cars3d/cars3d_test.npz")
+        H5 = join(PROJECT_PATH, "disdiff_adapters/data/cars3d/cars3d_train.npz")
 
     @dataclass
     class Params :
