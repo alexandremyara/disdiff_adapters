@@ -58,6 +58,11 @@ class Shapes3DDataModule(LightningDataModule) :
             self.train_dataset = Shapes3DDataset(train_images, train_labels)
             print("load dataset val")
             self.val_dataset = Shapes3DDataset(val_images, val_labels)
+        elif stage == "val":
+            val_images, val_labels = np.load(self.val_path)["images"],np.load(self.val_path)["labels"]
+            print("load dataset val")
+            self.val_dataset = Shapes3DDataset(val_images, val_labels)
+            
         else :
             test_images, test_labels = np.load(self.test_path)["images"], np.load(self.test_path)["labels"]
             self.test_dataset = Shapes3DDataset(test_images, test_labels)

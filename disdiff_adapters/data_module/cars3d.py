@@ -18,13 +18,13 @@ import torchvision.transforms as T
 class Cars3DDataModule(LightningDataModule) :
     
     def __init__(self,
-                 train_path: str=Cars3D.Path.TRAIN,
-                 val_path: str=Cars3D.Path.VAL,
-                 test_path: str=Cars3D.Path.TEST,
-                 ratio: int=0.8,
-                 batch_size: int=8,
-                 loader: DataLoader|None=None,
-                 transform=None,) :
+                train_path: str=Cars3D.Path.TRAIN,
+                val_path: str=Cars3D.Path.VAL,
+                test_path: str=Cars3D.Path.TEST,
+                ratio: int=0.8,
+                batch_size: int=8,
+                loader: DataLoader|None=None,
+                transform=None,) :
         
         super().__init__()
 

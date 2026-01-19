@@ -10,6 +10,7 @@ from PIL import Image
 import numpy as np
 from json import dump
 from tqdm import tqdm
+from PIL import Image, ImageDraw, ImageFont
 
 from disdiff_adapters.arch.vae import *
 from disdiff_adapters.utils import *
@@ -18,31 +19,31 @@ from disdiff_adapters.loss import *
 
 class _MultiDistillMe(torch.nn.Module) : 
     def __init__(self,
-                 in_channels: int,
-                 img_size: int,
-                 latent_dim_s: int,
-                 latent_dim_t: int,
-                 res_block: nn.Module=ResidualBlock) :
+                in_channels: int,
+                img_size: int,
+                latent_dim_s: int,
+                latent_dim_t: int,
+                res_block: nn.Module=ResidualBlock) :
         
         super().__init__()
 
         self.encoder_s = Encoder(in_channels=in_channels, 
-                                 img_size=img_size,
-                                 latent_dim=latent_dim_s,
-                                 res_block=res_block)
+                                img_size=img_size,
+                                latent_dim=latent_dim_s,
+                                res_block=res_block)
         
         self.encoder_t = Encoder(in_channels=in_channels, 
-                                 img_size=img_size,
-                                 latent_dim=latent_dim_t,
-                                 res_block=res_block)
+                                img_size=img_size,
+                                latent_dim=latent_dim_t,
+                                res_block=res_block)
         
         self.merge_operation = lambda z_s, z_t : torch.cat([z_s, z_t], dim=1)
 
         self.decoder = Decoder(out_channels=in_channels,
-                               img_size=img_size,
-                               latent_dim=latent_dim_s+latent_dim_t,
-                               res_block=res_block,
-                               out_encoder_shape=self.encoder_s.out_encoder_shape)
+                                img_size=img_size,
+                                latent_dim=latent_dim_s+latent_dim_t,
+                                res_block=res_block,
+                                out_encoder_shape=self.encoder_s.out_encoder_shape)
 
     def forward(self, images: torch.Tensor) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor], torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
 
@@ -61,7 +62,7 @@ class _MultiDistillMe(torch.nn.Module) :
         image_hat_logits = self.decoder(z)
 
         return mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z
-    
+
 class Xfactors(LightningModule) :
 ### TO DO
 ## Permettre de séléctionner des factor_value pour plusieurs facteurs
@@ -72,36 +73,36 @@ class Xfactors(LightningModule) :
 
 
     def __init__(self,
-                 in_channels: int,
-                 img_size: int,
-                 latent_dim_s: int,
-                 select_factors: list[int]=[0],
-                 dims_by_factors: list[int]=[2],
-                 res_block: nn.Module=ResidualBlock,
-                 beta_s: float=1.0,
-                 beta_t: float=1.0,
-                 warm_up: bool=False,
-                 kl_weight: float= 1e-6,
-                 type: str="all",
-                 l_cov: float=0.0,
-                 l_nce_by_factors: list[float]=[1e-3],
-                 l_anti_nce: float=0.0,
-                 temp: float=0.07,
-                 factor_value=-1,
-                 factor_value_1=-1,
-                 map_idx_labels: list|None= None,
-                 binary_factor: bool=False) :
+                in_channels: int,
+                img_size: int,
+                latent_dim_s: int,
+                select_factors: list[int]=[0],
+                dims_by_factors: list[int]=[2],
+                res_block: nn.Module=ResidualBlock,
+                beta_s: float=1.0,
+                beta_t: float=1.0,
+                warm_up: bool=False,
+                kl_weight: float= 1e-6,
+                type: str="all",
+                l_cov: float=0.0,
+                l_nce_by_factors: list[float]=[1e-3],
+                l_anti_nce: float=0.0,
+                temp: float=0.07,
+                factor_value=-1,
+                factor_value_1=-1,
+                map_idx_labels: list|None= None,
+                binary_factor: bool=False) :
         
         super().__init__()
         assert len(l_nce_by_factors) == len(dims_by_factors) and len(dims_by_factors) == len(select_factors)
-        
+        if map_idx_labels: assert isinstance(map_idx_labels, list), f"If specified, map_idx_labels should be a list."
         self.save_hyperparameters(ignore=["res_block"])
 
         self.model = _MultiDistillMe(in_channels=self.hparams.in_channels,
-                                     img_size=self.hparams.img_size,
-                                     latent_dim_s=self.hparams.latent_dim_s,
-                                     latent_dim_t=sum(dims_by_factors),
-                                     res_block=res_block)
+                                    img_size=self.hparams.img_size,
+                                    latent_dim_s=self.hparams.latent_dim_s,
+                                    latent_dim_t=sum(dims_by_factors),
+                                    res_block=res_block)
             
 
         self.images_test_buff = None
@@ -126,13 +127,13 @@ class Xfactors(LightningModule) :
         return mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z
     
     def loss(self, mus_logvars_s: torch.Tensor, 
-             mus_logvars_t: torch.Tensor, 
-             image_hat_logits: torch.Tensor, 
-             images: torch.Tensor, 
-             z_s: torch.Tensor,
-             z_t: torch.Tensor,
-             labels=None, 
-             log_components: bool=False) :
+            mus_logvars_t: torch.Tensor, 
+            image_hat_logits: torch.Tensor, 
+            images: torch.Tensor, 
+            z_s: torch.Tensor,
+            z_t: torch.Tensor,
+            labels=None, 
+            log_components: bool=False) :
 
         weighted_kl_s = self.hparams.kl_weight*self.hparams.beta_s*kl(*mus_logvars_s)
         weighted_kl_t = self.hparams.kl_weight*self.hparams.beta_t*kl(*mus_logvars_t)
@@ -181,7 +182,7 @@ class Xfactors(LightningModule) :
         
         mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z = self.forward(images)
         loss = self.loss(mus_logvars_s, mus_logvars_t, image_hat_logits, images, z_s, z_t, 
-                         labels=labels, log_components=True)
+                        labels=labels, log_components=True)
         
         if torch.isnan(loss):
             #raise ValueError("NaN loss")
@@ -322,7 +323,7 @@ class Xfactors(LightningModule) :
 
         else: 
             idx_cond = torch.randint_like(torch.zeros([nb_samples]), high=nb_sample_latent, dtype=torch.int32)
-        eps_cond = z_t[idx_cond, start:end].to(self.device)
+        eps_cond = z_t[idx_cond, start:end].to(self.device) #facteur latent
 
         if img_ref is None :
             eps_s = torch.stack(nb_samples*[z_s[pos]]).to(self.device)
@@ -340,10 +341,11 @@ class Xfactors(LightningModule) :
         z = self.model.merge_operation(eps_s, eps_t)
 
         ref_img = img_ref.squeeze(0) if img_ref is not None else buff_imgs[mask][pos]
-        return self.model.decoder(z).detach().cpu(), ref_img.unsqueeze(0).detach().cpu()         
+        target_img = buff_imgs[mask][idx_cond]
+        return self.model.decoder(z).detach().cpu(), ref_img.unsqueeze(0).detach().cpu(), target_img.unsqueeze(0).detach().cpu()         
 
     def generate_cond(self, nb_samples: int=16, cond: str="t", pos: int=0, 
-                      z_t=None, z_s=None, img_ref=None, factor_value=-1, is_val: bool=False) :
+                    z_t=None, z_s=None, img_ref=None, factor_value=-1, is_val: bool=False) :
         
         buff_latents = self.latent_val_buff if is_val else self.latent_train_buff
         buff_labels = self.labels_val_buff if is_val else self.labels_train_buff
@@ -424,6 +426,84 @@ class Xfactors(LightningModule) :
         plt.show()
         return mus_logvars_s, mus_logvars_t, images_gen, z_s, z_t, z
 
+    def merge(self, images_s: torch.Tensor, images_t: torch.Tensor, select_factor: int, verbose=False):
+        METRIC_EPS = 1e-6
+        def _to_nchw(x: torch.Tensor) -> torch.Tensor:
+            """
+            Convert x to NCHW.
+            Accepts: CHW, HWC, NCHW, NHWC.
+            """
+            if x.ndim == 3:
+                # CHW
+                if x.shape[0] in (1, 3):
+                    return x.unsqueeze(0)
+                # HWC
+                if x.shape[-1] in (1, 3):
+                    return x.permute(2, 0, 1).unsqueeze(0)
+                raise ValueError(f"Ambiguous 3D image shape {tuple(x.shape)} (neither CHW nor HWC).")
+
+            if x.ndim == 4:
+                # NCHW
+                if x.shape[1] in (1, 3):
+                    return x
+                # NHWC
+                if x.shape[-1] in (1, 3):
+                    return x.permute(0, 3, 1, 2)
+                raise ValueError(f"Ambiguous 4D batch shape {tuple(x.shape)} (neither NCHW nor NHWC).")
+
+            raise ValueError(f"Expected 3D or 4D tensor, got ndim={x.ndim} with shape {tuple(x.shape)}")
+
+        def _minmax01_per_sample(x: torch.Tensor, eps: float = METRIC_EPS) -> torch.Tensor:
+            """
+            Min-max scale each sample independently to [0, 1] over (C,H,W).
+            Expects NCHW float tensor.
+            """
+            x = x.float()
+            mn = x.amin(dim=(1, 2, 3), keepdim=True)
+            mx = x.amax(dim=(1, 2, 3), keepdim=True)
+            denom = (mx - mn).clamp_min(eps)
+            return (x - mn) / denom
+
+        assert images_s.shape == images_t.shape, "images have to be in the same format!"
+        #assert select_factor in self.hparams.select_factors, "This factor is not followed."
+
+
+        # 1) put in NCHW
+        images_s = _to_nchw(images_s)
+        images_t = _to_nchw(images_t)
+
+        # 2) move + dtype first (safe)
+        images_s = images_s.to(device=self.device, dtype=torch.float32)
+        images_t = images_t.to(device=self.device, dtype=torch.float32)
+
+        # 3) normalize safely
+        # images_s = _minmax01_per_sample(images_s)
+        # images_t = _minmax01_per_sample(images_t)
+        if verbose:
+            if self.hparams.map_idx_labels is not None:
+                print(f"The factor encoded chose is {self.hparams.map_idx_labels[select_factor]}")
+            else : print(f"The factor encoded is {select_factor}")
+            self.model.eval()
+
+        with torch.no_grad():
+            if select_factor in self.hparams.select_factors :
+                idx = self.hparams.select_factors.index(select_factor)  # <--- IMPORTANT
+                start = sum(self.hparams.dims_by_factors[:idx])
+                end = start + self.hparams.dims_by_factors[idx]
+                mu_s, _ = self.model.encoder_s(images_s)  # expects NCHW
+                mu_t_ref, _ = self.model.encoder_t(images_s)
+
+                mu_t, _ = self.model.encoder_t(images_t)
+                z_t = torch.cat([mu_t_ref[:,:start], mu_t[:,start:end], mu_t_ref[:,end:]], dim=1)
+                z_s = mu_s
+            else :
+                z_s, _ = self.model.encoder_s(images_t)
+                z_t, _ = self.model.encoder_t(images_s)
+            z = self.model.merge_operation(z_s, z_t)
+            images_hat_logits = self.model.decoder(z)
+
+        return images_hat_logits
+
 #### Lightning Hooks
 
     def on_train_epoch_start(self):
@@ -459,9 +539,12 @@ class Xfactors(LightningModule) :
 
             self.log_gen_images()
 
-            ### latent space
             self.log_latent()
             # self.log_factorvae()
+
+            self.log_mosaic()
+
+            self.log_merge()
 
     def on_validation_epoch_start(self):
         self.current_val_batch = 0
@@ -477,12 +560,6 @@ class Xfactors(LightningModule) :
             try : os.mkdir(os.path.join(self.logger.log_dir, f"epoch_{epoch}", "val"))
             except FileExistsError as e : pass
 
-            #compute a sample of the latent space
-            # for images in self.images_val_buff :
-            #     with torch.no_grad() : _, _, _, z_s, z_t, z = self.forward(images.to(self.device), test=True) #images shape : [32, 3, 64, 64]
-
-            #     self.latent_val_buff["s"].append(z_s.detach().cpu())
-            #     self.latent_val_buff["t"].append(z_t.detach().cpu())
             self.latent_val_buff["s"] = torch.cat(self.latent_val_buff["s"])
             self.latent_val_buff["t"] = torch.cat(self.latent_val_buff["t"])
 
@@ -495,9 +572,12 @@ class Xfactors(LightningModule) :
             path_heatmap = join(self.logger.log_dir, f"epoch_{epoch}","val",f"cov_{epoch}.png")
             log_cross_cov_heatmap(*mus_logvars_s, *mus_logvars_t, save_path=path_heatmap)
 
-            ### latent space
             self.log_latent(is_val=True)
             # self.log_factorvae(is_val=True)
+
+            self.log_mosaic(is_val=True)
+
+            self.log_merge(is_val=True)
 
 
 #### Log
@@ -546,7 +626,7 @@ class Xfactors(LightningModule) :
                 factor_value = self.hparams.factor_value if i%2 else self.hparams.factor_value_1
                 pos = torch.randint(low=0, high=min(len(self.latent_val_buff), len(self.latent_train_buff)), size=(1,)).item()
 
-                images_cond_f_gen, input_s = self.generate_by_factors(cond=cond, pos=pos, factor_value=factor_value, is_val=is_val, binary_factor=self.hparams.binary_factor)
+                images_cond_f_gen, input_s, _ = self.generate_by_factors(cond=cond, pos=pos, factor_value=factor_value, is_val=is_val, binary_factor=self.hparams.binary_factor)
                 images_cond_f_gen_ref = torch.cat([images_cond_f_gen.detach().cpu(), input_s])
                 save_gen_f_path = join(self.logger.log_dir, f"epoch_{epoch}", f"gen_f={cond}_{epoch}_{i}.png")
                 if is_val : save_gen_f_path = join(self.logger.log_dir, f"epoch_{epoch}", "val" ,f"gen_f={cond}_{epoch}_{i}.png")
@@ -573,10 +653,10 @@ class Xfactors(LightningModule) :
         map_ = self.hparams.map_idx_labels
         label = [f"gen_{cond}" for cond in self.hparams.select_factors] if map_ is None else [f"gen_{map_[cond]}" for cond in self.hparams.select_factors]
         final_image = merge_images(save_gen_path, 
-                                   join(self.logger.log_dir, "final_gen_s.png"), 
-                                   join(self.logger.log_dir, "final_gen_t.png"), 
+                                    join(self.logger.log_dir, "final_gen_s.png"), 
+                                    join(self.logger.log_dir, "final_gen_t.png"), 
                                    *[join(self.logger.log_dir, f"final_gen_f={cond}.png") for cond in self.hparams.select_factors],
-                                   labels=["gen", "gen_s", "gen_t"]+label)
+                                    labels=["gen", "gen_s", "gen_t"]+label)
         if is_val : save_gen_all_path = join(self.logger.log_dir, f"epoch_{epoch}","val",f"gen_all_{epoch}.png")
         else : save_gen_all_path = join(self.logger.log_dir, f"epoch_{epoch}",f"gen_all_{epoch}.png")
         final_image.save(save_gen_all_path)
@@ -588,17 +668,19 @@ class Xfactors(LightningModule) :
             os.remove(path_epoch_t[i])
             os.remove(path_epoch_s[i])
 
-    def log_latent(self, is_val: bool=False) :
+    def log_latent(self, is_val: bool=False, log_dir: str="") :
         buff_latents = self.latent_val_buff if is_val else self.latent_train_buff
         buff_labels = self.labels_val_buff if is_val else self.labels_train_buff
         buff_imgs = self.images_val_buff if is_val else self.images_train_buff
 
         number_labels = buff_labels.shape[1]
         
+        if self.logger is not None : log_dir = self.logger.log_dir
+
         for i in range(number_labels) :
             labels = buff_labels[:, i].unsqueeze(1)
-            z_s_path = join(self.logger.log_dir, "z_s.png")
-            z_f_path = [join(self.logger.log_dir, f"z_f={cond}.png") for cond in self.hparams.select_factors]
+            z_s_path = join(log_dir, "z_s.png")
+            z_f_path = [join(log_dir, f"z_f={cond}.png") for cond in self.hparams.select_factors]
             title = f"latent space s {i}" if self.hparams.map_idx_labels is None else "latent space s "+self.hparams.map_idx_labels[i]
 
             display_latent(labels=labels, z=buff_latents["s"], title=title)
@@ -615,60 +697,192 @@ class Xfactors(LightningModule) :
                 plt.close(fig)
             latent_img = merge_images_with_black_gap([z_s_path]+z_f_path)
             
-            if is_val : path_latent = join(self.logger.log_dir, f"epoch_{self.current_epoch}", "val", f"latent_space_{i}_{self.current_epoch}.png")
-            else : path_latent = join(self.logger.log_dir, f"epoch_{self.current_epoch}", f"latent_space_{i}_{self.current_epoch}.png")
+            if is_val : path_latent = join(log_dir, f"epoch_{self.current_epoch}", "val", f"latent_space_{i}_{self.current_epoch}.png")
+            else : path_latent = join(log_dir, f"epoch_{self.current_epoch}", f"latent_space_{i}_{self.current_epoch}.png")
             latent_img.save(path_latent)
             os.remove(z_s_path)
             for path in z_f_path : os.remove(path)
 
         if is_val : 
-            path_latents = [join(self.logger.log_dir, f"epoch_{self.current_epoch}", "val", f"latent_space_{i}_{self.current_epoch}.png") for i in range(number_labels)]
-            path_final_latent = join(self.logger.log_dir, f"epoch_{self.current_epoch}", "val", f"latent_space_{self.current_epoch}.png")
+            path_latents = [join(log_dir, f"epoch_{self.current_epoch}", "val", f"latent_space_{i}_{self.current_epoch}.png") for i in range(number_labels)]
+            path_final_latent = join(log_dir, f"epoch_{self.current_epoch}", "val", f"latent_space_{self.current_epoch}.png")
         else :
-            path_latents = [join(self.logger.log_dir, f"epoch_{self.current_epoch}", f"latent_space_{i}_{self.current_epoch}.png") for i in range(number_labels)]
-            path_final_latent = join(self.logger.log_dir, f"epoch_{self.current_epoch}", f"latent_space_{self.current_epoch}.png")
+            path_latents = [join(log_dir, f"epoch_{self.current_epoch}", f"latent_space_{i}_{self.current_epoch}.png") for i in range(number_labels)]
+            path_final_latent = join(log_dir, f"epoch_{self.current_epoch}", f"latent_space_{self.current_epoch}.png")
         
         final_images = merge_images(path_latents)
         final_images.save(path_final_latent)
         for i in range(number_labels) : os.remove(path_latents[i])
 
+    def log_mosaic(self, is_val: bool=False, log_dir: str="") :
 
-    # def log_factorvae(self, is_val:bool=False):
-    #     latent_buff = self.latent_val_buff if is_val else self.latent_train_buff
-    #     label = self.labels_val_buff if is_val else self.labels_train_buff 
-    #     mode = "val" if is_val else "train"
+        buff_latents = self.latent_val_buff if is_val else self.latent_train_buff
+        buff_labels = self.labels_val_buff if is_val else self.labels_train_buff
+        buff_imgs = self.images_val_buff if is_val else self.images_train_buff
 
-    #     factorvaescore = FactorVAEScoreLight(z_s=latent_buff["s"],
-    #                                          z_t=latent_buff["t"],
-    #                                          label=label,
-    #                                          dim_t = self.hparams.latent_dim_t,
-    #                                          dim_s = self.hparams.latent_dim_s,
-    #                                          select_factor=self.hparams.select_factors[0],
-    #                                          n_iter=150000,
-    #                                          batch_size=512)
-    #     score = factorvaescore.get_score()
-    #     self.log(f"{mode}/factorvae", score)
+        if self.logger is not None : log_dir = self.logger.log_dir
 
-    #     save_factorvae_path = os.path.join(self.logger.log_dir, f"epoch_{self.current_epoch}", f"metric_{self.current_epoch}.json")
-    #     if is_val : save_factorvae_path = os.path.join(self.logger.log_dir, f"epoch_{self.current_epoch}", "val" ,f"metric_{self.current_epoch}.json")
+        factors = list(self.hparams.select_factors) if self.hparams.map_idx_labels is None else list(range(len(self.hparams.map_idx_labels)))
 
-    #     data = {"factorvaescore": score}
-    #     with open(save_factorvae_path, "w") as f: dump(data, f, indent=4)
-        
+        ncols = 5
+        tiles = []
 
+        for idx, simg in enumerate(buff_imgs):
+            if idx == 5 : break
+            tiles.append(simg.cpu())
+
+        for _ in range(ncols):
+            tiles.append(buff_imgs[5].cpu())
+
+        for f in factors:
+            for i,simg in enumerate(buff_imgs):
+                if i == 5 : break
+                out = self.merge(simg.unsqueeze(0).to(self.device), buff_imgs[5].unsqueeze(0).to(self.device), select_factor=f) 
+                out = out.detach()
+                if out.ndim == 4 and out.size(0) == 1: out = out.squeeze(0)
+                tiles.append(out.cpu())
+
+        grid_tensor = torch.stack(tiles, dim=0)  # [R*ncols, C, H, W]
+        _, C, H, W = grid_tensor.shape[0], grid_tensor.shape[1], grid_tensor.shape[2], grid_tensor.shape[3]
+
+        # --- grid torchvision ---
+        padding=2
+        pad_value=0
+        left_margin=100              
+        font_size=10        
+        font_path=None
+        text_color=(0, 0, 0)       
+        quality=95
+        save_mosaic_path = os.path.join(log_dir, f"epoch_{self.current_epoch}", f"mosa_{self.current_epoch}.png")
+        if is_val : save_mosaic_path = os.path.join(log_dir, f"epoch_{self.current_epoch}", "val" ,f"mosa_{self.current_epoch}.png")
+
+        grid = vutils.make_grid(
+            grid_tensor,
+            nrow=ncols,
+            padding=padding,
+            pad_value=pad_value
+        )  # [C, Hgrid, Wgrid] in [0,1]
+
+        grid_u8 = (grid.clamp(0, 1) * 255).to(torch.uint8)
+        grid_hwc = grid_u8.permute(1, 2, 0).cpu().numpy()
+        grid_img = Image.fromarray(grid_hwc)
+
+        # --- préparation font ---
+        if font_size is None:
+            font_size = max(12, int(H * 0.35))  # auto (adapté à 64x64 par ex.)
+        try:
+            if font_path is not None:
+                font = ImageFont.truetype(font_path, font_size)
+            else:
+                # souvent dispo sur Linux
+                font = ImageFont.truetype("DejaVuSans.ttf", font_size)
+        except Exception:
+            font = ImageFont.load_default()
+
+        # --- canvas final avec marge gauche ---
+        final_w = grid_img.width + left_margin
+        final_h = grid_img.height
+        final_img = Image.new("RGB", (final_w, final_h), (255, 255, 255))
+        final_img.paste(grid_img, (left_margin, 0))
+
+        draw = ImageDraw.Draw(final_img)
+
+        nrows = 2 + len(factors)
+
+        def row_center_y(r: int) -> int:
+            y0 = padding + r * (H + padding)
+            return int(y0 + H / 2)
+
+        # helper pour écrire centré verticalement (et à peu près centré en hauteur)
+        def draw_row_label(r: int, text: str):
+            y = row_center_y(r)
+            # bbox pour centrer verticalement
+            bbox = draw.textbbox((0, 0), text, font=font)
+            text_h = bbox[3] - bbox[1]
+            x = 10
+            draw.text((x, y - text_h // 2), text, fill=text_color, font=font)
+
+        draw_row_label(0, "SRC")
+        draw_row_label(1, "TRT")
+
+        map_labels = getattr(self.hparams, "map_idx_labels", None)
+        for ridx, f in enumerate(factors, start=2):
+            if map_labels is not None:
+                if isinstance(map_labels, (list, tuple)) and 0 <= int(f) < len(map_labels): name = str(map_labels[int(f)])
+                else: name = str(f)
+            else: name = str(f)
+            draw_row_label(ridx, name)
+
+        # --- save ---
+        final_img.save(save_mosaic_path, quality=quality)
+        return final_img
+
+    def log_merge(self, is_val: bool = False, log_dir: str = ""):
+        epoch = self.current_epoch
+        if self.logger is not None:
+            log_dir = self.logger.log_dir
+
+        epoch_dir = join(log_dir, f"epoch_{epoch}", "val" if is_val else "")
+        os.makedirs(epoch_dir, exist_ok=True)
+
+        nb_samples_gen = getattr(self.hparams, "nb_samples", 16)  # tu peux garder 16 pour générer
+        rows_to_save = []
+
+        # si tu veux un seul cond au lieu de boucler : cond = self.hparams.select_factors[0]
+        for cond in self.hparams.select_factors:
+            rows_to_save.clear()
+
+            for i in range(4):
+                factor_value = self.hparams.factor_value if i % 2 else getattr(self.hparams, "factor_value_1", -1)
+                pos = torch.randint(
+                    low=0,
+                    high=min(len(self.latent_val_buff), len(self.latent_train_buff)),
+                    size=(1,)
+                ).item()
+
+                img_out, img_ref, img_target = self.generate_by_factors(
+                    cond=cond,
+                    nb_samples=nb_samples_gen,
+                    pos=pos,
+                    factor_value=factor_value,
+                    is_val=is_val,
+                    binary_factor=self.hparams.binary_factor
+                )
+
+                # sanitize shapes
+                # img_out: (N,C,H,W)
+                # img_ref: (1,C,H,W)
+                # img_target: (1,N,C,H,W) ou (N,C,H,W)
+                if img_target.ndim == 5:
+                    img_target = img_target.squeeze(0)
+                if img_ref.ndim == 5:
+                    img_ref = img_ref.squeeze(0)
+
+                # on prend UN seul élément du batch (ici 0)
+                out1 = img_out[0:1]          # (1,C,H,W)
+                ref1 = img_ref[0:1]          # (1,C,H,W)
+                tgt1 = img_target[0:1]       # (1,C,H,W)
+
+                # une "ligne" = 3 images (OUT | REF | TARGET)
+                rows_to_save.append(torch.cat([out1, ref1, tgt1], dim=0))  # (3,C,H,W)
+
+            # 4 lignes -> 12 images au total, on sauvegarde en nrow=3 => 4 rows
+            all_imgs = torch.cat(rows_to_save, dim=0)  # (12,C,H,W)
+            save_path = join(epoch_dir, f"merge_f={cond}_{epoch}.png")
+            vutils.save_image(all_imgs, save_path, nrow=3, padding=6, pad_value=0)
 
 
 class FactorVAEScoreLight :
 
     def __init__(self,  
-                 z_s: torch.Tensor,
-                 z_t: torch.Tensor,
-                 label: torch.Tensor,
-                 dim_t: int, 
-                 dim_s: int, 
-                 select_factor: int,
-                 n_iter: int=100000,
-                 batch_size: int=256) :
+                z_s: torch.Tensor,
+                z_t: torch.Tensor,
+                label: torch.Tensor,
+                dim_t: int, 
+                dim_s: int, 
+                select_factor: int,
+                n_iter: int=100000,
+                batch_size: int=256) :
 
         self.format_data(z_s, z_t, label)
         self.dim_t = dim_t

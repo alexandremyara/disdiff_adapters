@@ -16,16 +16,16 @@ from disdiff_adapters.data_module import *
 class LatentDataModule(LightningDataModule) :
     
     def __init__(self, 
-                 ratio: int=0.8,
-                 batch_size: int=2**19,
-                 loader: DataLoader|None=None,
-                 Model_class: LightningModule=MultiDistillMeModule,
-                 data_name: str="shapes",
-                 ckpt_path: str="/projects/compures/alexandre/disdiff_adapters/disdiff_adapters/logs/md_with_val/shapes/loss_vae_nce/test_factor_floor/batch32/test_dim_s126/md_epoch=30_beta=(100.0,1.0)_latent=(126,2)_batch=32_warm_up=False_lr=1e-05_arch=res+l_cov=0.0+l_nce=0.1+l_anti_nce=0.0_/checkpoints/epoch=7-step=76800.ckpt",
-                 cond: str="both",
-                 pref_gpu: int=0,
-                 standard: bool=False,
-                 verbose: bool=True) :
+                ratio: int=0.8,
+                batch_size: int=2**19,
+                loader: DataLoader|None=None,
+                Model_class: LightningModule=MultiDistillMeModule,
+                data_name: str="shapes",
+                ckpt_path: str="/projects/compures/alexandre/disdiff_adapters/disdiff_adapters/logs/md_with_val/shapes/loss_vae_nce/test_factor_floor/batch32/test_dim_s126/md_epoch=30_beta=(100.0,1.0)_latent=(126,2)_batch=32_warm_up=False_lr=1e-05_arch=res+l_cov=0.0+l_nce=0.1+l_anti_nce=0.0_/checkpoints/epoch=7-step=76800.ckpt",
+                cond: str="both",
+                pref_gpu: int=0,
+                standard: bool=False,
+                verbose: bool=True) :
         super().__init__()
 
         if data_name == "shapes" : self.Data_class = Shapes3D
@@ -78,8 +78,7 @@ class LatentDataModule(LightningDataModule) :
                 np.savez(self.test_path, images=test_images, labels=test_labels)
 
             else : pass
-        else : 
-            print("No prepare data for celebA - Please ensure all path exists")
+        else : pass
 
     def setup(self, stage: str|None) :
 

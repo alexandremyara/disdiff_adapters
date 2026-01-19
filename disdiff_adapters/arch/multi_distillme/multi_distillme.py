@@ -142,7 +142,7 @@ class _MultiDistillMe(torch.nn.Module) :
         image_hat_logits = self.decoder(z)
 
         return mus_logvars_s, mus_logvars_t, image_hat_logits, z_s, z_t, z
-    
+
 class MultiDistillMeModule(LightningModule) :
 
     def __init__(self,

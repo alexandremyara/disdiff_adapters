@@ -8,6 +8,8 @@ import math
 from PIL import Image, ImageDraw, ImageFont
 import seaborn as sns # type: ignore
 from disdiff_adapters.loss import *
+import json
+from pathlib import Path
 
 from sklearn.decomposition import PCA
 
@@ -61,7 +63,7 @@ def split(data: torch.Tensor, label: torch.Tensor, ratio: float=0.8) :
 def display(batch: tuple[torch.Tensor]) -> None:
     """
     Affiche un batch d'images RGB.
-    batch = (images [B,3,H,W], labels [B,])
+    batch = (images [B,C,H,W], labels [B,])
     """
     images, labels = batch
     if not isinstance(images, torch.Tensor) : images = torch.from_numpy(images)
@@ -143,11 +145,11 @@ def sample_from(mu_logvar: tuple[torch.Tensor], test: bool=False) -> torch.Tenso
 
 def del_outliers(arr: np.ndarray, k: int) -> np.ndarray:
 
-    assert type(arr) == np.ndarray, "should be an array"
-    assert k<=len(arr), "k>len(arr)"
-    assert len(arr.shape) == 1, "error shape"
-    idxs = np.argpartition(arr, -k)[-k:]
-    arr[idxs] = 0
+    # assert type(arr) == np.ndarray, "should be an array"
+    # assert k<=len(arr), "k>len(arr)"
+    # assert len(arr.shape) == 1, "error shape"
+    # idxs = np.argpartition(arr, -k)[-k:]
+    # arr[idxs] = 0
     return arr
 
 
@@ -167,6 +169,9 @@ def interpolate_hex_palette(base_hex_colors, n_out):
     out = np.stack([np.interp(x_out, x_base, base[:, ch]) for ch in range(3)], axis=1)  # [n_out,3]
     return [rgb01_to_hex(out[i]) for i in range(n_out)]
 
+def load_json(path: Path) -> dict:
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
 
 def display_latent(labels: torch.Tensor, 
                mu_logvars: None|tuple[torch.Tensor]=None,

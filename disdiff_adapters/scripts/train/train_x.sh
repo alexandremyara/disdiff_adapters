@@ -4,13 +4,13 @@ cd /projects/compures/alexandre/disdiff_adapters
 source /projects/compures/alexandre/.venv/bin/activate
 
 batch_size=32
-max_epochs=65
-dataset="cars3d"
+max_epochs=70
+dataset="mpi3d"
 beta_s="$1"
 beta_t=100.0
-latent_dims_s=("126")
+latent_dims_s=("8")
 dims_by_factors="2"
-select_factors="=1,2"
+select_factors="_s=-1"
 warm_up="False"
 lr=1e-05
 arch="res"
@@ -18,7 +18,7 @@ loss_type="$2"
 l_cov=0.0
 l_nce_by_factors="0.1"
 l_anti_nce=0.0
-key="factor=1,2"
+key="_with_merge"
 version_model="$3"
 
 gpus="${4:-0}"
