@@ -1,19 +1,27 @@
+import numpy as np
 import torch
 from torch.utils.data import Dataset
-from disdiff_adapters.utils.utils import load_h5
-from disdiff_adapters.utils.const import Shapes3D
 
-class Shapes3DDataset(Dataset) :
 
-    def __init__(self, images: torch.Tensor, labels: torch.Tensor):
-        self.images, self.labels = images, labels
-        assert(len(images)==len(labels)), "Number of images and labels doesn't match" 
+class Shapes3DDataset(Dataset):
+    def __init__(self, npz_path: str):
+        self.npz_path = npz_path
+        self._npz = None
+        with np.load(npz_path, mmap_mode="r") as f:
+            self.length = f["images"].shape[0]
 
-    def __len__(self) -> int :
-        return self.images.shape[0]
+    def _ensure_loaded(self):
+        if self._npz is None:
+            self._npz = np.load(self.npz_path, mmap_mode="r")
+            self.images = self._npz["images"]
+            self.labels = self._npz["labels"]
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor] :
+    def __len__(self) -> int:
+        return self.length
+
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        self._ensure_loaded()
         image = self.images[idx]
-        if type(image) != torch.Tensor : image = torch.Tensor(image)
-        processed_img = (image.permute(2,0,1)/255).to(torch.float32)
-        return processed_img, self.labels[idx]
+        processed_img = torch.from_numpy(image).permute(2, 0, 1).to(torch.float32) / 255.0
+        label = torch.as_tensor(self.labels[idx])
+        return processed_img, label
