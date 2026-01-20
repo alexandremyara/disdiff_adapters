@@ -14,3 +14,6 @@ disdiff_adapters/logs/*
 **/notebook/*
 **/lightning_logs/*
 **/data/*
+logs
+wandb
+.envrc
