@@ -4,9 +4,17 @@ import torch.nn.functional as F
 from lightning import LightningModule
 from torchmetrics.classification import Accuracy
 
+
 class Classifier(LightningModule):
-    def __init__(self, latent_dim: int, num_classes: int, hidden_dim: int = 256, lr: float = 1e-3, dropout: float = 0.2,
-                 select_factor: int=0):
+    def __init__(
+        self,
+        latent_dim: int,
+        num_classes: int,
+        hidden_dim: int = 256,
+        lr: float = 1e-3,
+        dropout: float = 0.2,
+        select_factor: int = 0,
+    ):
         super().__init__()
         self.save_hyperparameters()
 
@@ -15,19 +23,17 @@ class Classifier(LightningModule):
             nn.BatchNorm1d(hidden_dim),
             nn.ReLU(),
             nn.Dropout(dropout),
-
             nn.Linear(hidden_dim, hidden_dim // 2),
             nn.BatchNorm1d(hidden_dim // 2),
             nn.ReLU(),
             nn.Dropout(dropout),
-
-            nn.Linear(hidden_dim // 2, num_classes)
+            nn.Linear(hidden_dim // 2, num_classes),
         )
 
         self.train_acc = Accuracy(task="multiclass", num_classes=num_classes)
         self.val_acc = Accuracy(task="multiclass", num_classes=num_classes)
         self.test_acc = Accuracy(task="multiclass", num_classes=num_classes)
- 
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.classifier(x)
 

@@ -1,89 +1,113 @@
 from os.path import join
 from os import getenv
 from dataclasses import dataclass
-from typing import ClassVar
+from pathlib import Path
 
-#General Const
-PROJECT_PATH= "."
+# General Const (can be overridden with env vars)
+PROJECT_PATH = getenv("PROJECT_PATH", str(Path(__file__).resolve().parents[2]))
+DATA_ROOT = getenv("DATA_ROOT", join(PROJECT_PATH, "disdiff_adapters/data"))
+LOG_DIR = getenv("LOG_DIR", join(PROJECT_PATH, "logs"))
+CELEBA_DATA_DIR = getenv("CELEBA_DATA_DIR", join(DATA_ROOT, "celeba"))
+LOG_DIR_SHELL = getenv("LOG_DIR_SHELL")
 
-LOG_DIR = join(PROJECT_PATH, "disdiff_adapters/logs")
 
-#Const by Dataset/Model
+# Const by Dataset/Model
 @dataclass
-class Shapes3D :
+class Shapes3D:
+    @dataclass
+    class Path:
+        ROOT = join(DATA_ROOT, "3dshapes")
+        H5 = join(ROOT, "3dshapes.h5")
+        TRAIN = join(ROOT, "shapes3d_train.npz")
+        VAL = join(ROOT, "shapes3d_val.npz")
+        TEST = join(ROOT, "shapes3d_test.npz")
+        NPZ = join(ROOT, "split_3dshapes.npz")
+        BUFF_IMG = join(ROOT, "images_train_buff.pt")
+        BUFF_LABELS = join(ROOT, "labels_train_buff.pt")
 
     @dataclass
-    class Path :
-        H5 = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/3dshapes.h5")
-        TRAIN = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/shapes3d_train.npz")
-        VAL = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/shapes3d_val.npz")
-        TEST = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/shapes3d_test.npz")
-        NPZ = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/split_3dshapes.npz")
-        BUFF_IMG = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/images_train_buff.pt")
-        BUFF_LABELS = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/labels_train_buff.pt")
-    @dataclass
-    class Params :
-        FACTORS_IN_ORDER = ['floor_hue', 'wall_hue', 'object_hue', 'scale', 'shape',
-                        'orientation']
-        
-        NUM_VALUES_PER_FACTOR = {'floor_hue': 10, 'wall_hue': 10, 'object_hue': 10, 
-                            'scale': 8, 'shape': 4, 'orientation': 15}
-        
-@dataclass
-class MPI3D :
+    class Params:
+        FACTORS_IN_ORDER = [
+            "floor_hue",
+            "wall_hue",
+            "object_hue",
+            "scale",
+            "shape",
+            "orientation",
+        ]
 
-    @dataclass
-    class Path :
-        H5 = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/3dshapes.h5")
-        NPZ = join(PROJECT_PATH, "disdiff_adapters/data/mpi3d/mpi3d_toy.npz")
-        TRAIN = join(PROJECT_PATH, "disdiff_adapters/data/mpi3d/mpi3d_train.npz")
-        VAL = join(PROJECT_PATH, "disdiff_adapters/data/mpi3d/mpi3d_val.npz")
-        TEST = join(PROJECT_PATH, "disdiff_adapters/data/mpi3d/mpi3d_test.npz")
-    @dataclass
-    class Params :
-        FACTORS_IN_ORDER = ['object_color', 'object_shape', 'object_size', 'camera_height', 'background_color',
-                        'horizontal_axis', "vertical_axis"]
-        
-        NUM_VALUES_PER_FACTOR = {'object_color': 6, 'object_shape': 6, 'object_size': 2, 
-                            'camera_height': 3, 'background_color': 3, 'horizontal_axis': 40,
-                            "vertical_axis":40}
+        NUM_VALUES_PER_FACTOR = {
+            "floor_hue": 10,
+            "wall_hue": 10,
+            "object_hue": 10,
+            "scale": 8,
+            "shape": 4,
+            "orientation": 15,
+        }
+
 
 @dataclass
-class BloodMNIST :
-    
+class MPI3D:
     @dataclass
-    class Path :
-        TRAIN = join(PROJECT_PATH, "disdiff_adapters/data/bloodmnist/bloodmnist_train.pt")
-        VAL = join(PROJECT_PATH, "disdiff_adapters/data/bloodmnist/bloodmnist_val.pt")
-        TEST = join(PROJECT_PATH, "disdiff_adapters/data/bloodmnist/bloodmnist_test.pt")
-        NPZ = join(PROJECT_PATH, "disdiff_adapters/data/bloodmnist/bloodmnist.npz")
-        H5 = join(PROJECT_PATH,"disdiff_adapters/data/bloodmnist/bloodmnist.h5" )
+    class Path:
+        ROOT = join(DATA_ROOT, "mpi3d")
+        H5 = join(ROOT, "mpi3d.h5")
+        NPZ = join(ROOT, "mpi3d_toy.npz")
+        TRAIN = join(ROOT, "mpi3d_train.npz")
+        VAL = join(ROOT, "mpi3d_val.npz")
+        TEST = join(ROOT, "mpi3d_test.npz")
+
+    @dataclass
+    class Params:
+        FACTORS_IN_ORDER = [
+            "object_color",
+            "object_shape",
+            "object_size",
+            "camera_height",
+            "background_color",
+            "horizontal_axis",
+            "vertical_axis",
+        ]
+
+        NUM_VALUES_PER_FACTOR = {
+            "object_color": 6,
+            "object_shape": 6,
+            "object_size": 2,
+            "camera_height": 3,
+            "background_color": 3,
+            "horizontal_axis": 40,
+            "vertical_axis": 40,
+        }
+
+
+@dataclass
+class BloodMNIST:
+    @dataclass
+    class Path:
+        ROOT = join(DATA_ROOT, "bloodmnist")
+        TRAIN = join(ROOT, "bloodmnist_train.pt")
+        VAL = join(ROOT, "bloodmnist_val.pt")
+        TEST = join(ROOT, "bloodmnist_test.pt")
+        NPZ = join(ROOT, "bloodmnist.npz")
+        H5 = join(ROOT, "bloodmnist.h5")
         VAE = join(LOG_DIR, "vae/bloodmnist")
 
-    # @dataclass
-    # class Params :
-    #     N_TRAIN = 
-    #     N_VAL =
-    #     N_TEST = 
 
 @dataclass
-class CelebA :
-
+class CelebA:
     @dataclass
-    class Path :
-        DATA = "/projects/compures/alexandre/PyTorch-VAE/Data/"
-        BUFF_IMG = join(PROJECT_PATH, "disdiff_adapters/data/celeba/images_train_buff.pt")
-        BUFF_LABELS = join(PROJECT_PATH, "disdiff_adapters/data/celeba/labels_train_buff.pt")
-        ## None
-        H5 = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/3dshapes.h5")
-        TRAIN = join(PROJECT_PATH, "disdiff_adapters/data/celeba/celeba_train.npz")
-        VAL = join(PROJECT_PATH, "disdiff_adapters/data/celeba/celeba_val.npz")
-        TEST = join(PROJECT_PATH, "disdiff_adapters/data/celeba/celeba_test.npz")
-        NPZ = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/split_3dshapes.npz")
-        BUFF_IMG = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/images_train_buff.pt")
-        BUFF_LABELS = join(PROJECT_PATH, "disdiff_adapters/data/3dshapes/labels_train_buff.pt")
+    class Path:
+        ROOT = CELEBA_DATA_DIR
+        H5 = join(ROOT, "celeba.h5")
+        TRAIN = join(ROOT, "celeba_train.npz")
+        VAL = join(ROOT, "celeba_val.npz")
+        TEST = join(ROOT, "celeba_test.npz")
+        NPZ = join(ROOT, "celeba.npz")
+        BUFF_IMG = join(ROOT, "images_train_buff.pt")
+        BUFF_LABELS = join(ROOT, "labels_train_buff.pt")
 
-    class Params : 
+    class Params:
+        # fmt: off
         FACTORS_IN_ORDER = [
         "5_o_Clock_Shadow",   # 0
         "Arched_Eyebrows",    # 1
@@ -126,7 +150,7 @@ class CelebA :
         "Wearing_Necktie",    # 38
         "Young",              # 39
     ]     
-    
+
         DISEN_BASE_IDX = [
         "5_o_Clock_Shadow",   # 0
         "Arched_Eyebrows",    # 1
@@ -178,48 +202,61 @@ class CelebA :
         "Wearing_Hat",        # 35
         "Wearing_Lipstick",   # 36
     ]
+        # fmt: on
 
         REPRESENTANT_IDX = [15, 20, 26, 31, 35, 36]
+
 
 @dataclass
 class MNIST:
     @dataclass
-    class Path :
-        data_dir: str = join(PROJECT_PATH, "disdiff_adapters/data/mnist")
+    class Path:
+        data_dir: str = join(DATA_ROOT, "mnist")
+
 
 @dataclass
 class DSprites:
     @dataclass
-    class Path :
-        H5 = join(PROJECT_PATH, "disdiff_adapters/data/dsprites/dsprites.h5")
-        TRAIN = join(PROJECT_PATH, "disdiff_adapters/data/dsprites/dsprites_train.npz")
-        VAL = join(PROJECT_PATH, "disdiff_adapters/data/dsprites/dsprites_val.npz")
-        TEST = join(PROJECT_PATH, "disdiff_adapters/data/dsprites/dsprites_test.npz")
-        NPZ = join(PROJECT_PATH, "disdiff_adapters/data/dsprites/dsprites.npz")
-        BUFF_IMG = join(PROJECT_PATH, "disdiff_adapters/data/dsprites/images_train_buff.pt")
-        BUFF_LABELS = join(PROJECT_PATH, "disdiff_adapters/data/dsprites/labels_train_buff.pt")
+    class Path:
+        ROOT = join(DATA_ROOT, "dsprites")
+        H5 = join(ROOT, "dsprites.h5")
+        TRAIN = join(ROOT, "dsprites_train.npz")
+        VAL = join(ROOT, "dsprites_val.npz")
+        TEST = join(ROOT, "dsprites_test.npz")
+        NPZ = join(ROOT, "dsprites.npz")
+        BUFF_IMG = join(ROOT, "images_train_buff.pt")
+        BUFF_LABELS = join(ROOT, "labels_train_buff.pt")
 
     @dataclass
-    class Params :
-        FACTORS_IN_ORDER = ['shape', 'scale', 'orientation', 'pos_x',
-                        'pos_y']
-        
-        NUM_VALUES_PER_FACTOR = {'shape': 3, 'scale': 6, 
-                            'orientation': 40, 'pos_x': 32, 'pos_y': 32}
-        
+    class Params:
+        FACTORS_IN_ORDER = ["shape", "scale", "orientation", "pos_x", "pos_y"]
+
+        NUM_VALUES_PER_FACTOR = {
+            "shape": 3,
+            "scale": 6,
+            "orientation": 40,
+            "pos_x": 32,
+            "pos_y": 32,
+        }
+
+
 @dataclass
 class Cars3D:
     @dataclass
-    class Path :
-        CACHE = join(PROJECT_PATH, "disdiff_adapters/data/cars3d_cache/")
-        LOCAL = join(PROJECT_PATH, "disdiff_adapters/data/cars3d")
-        TRAIN = join(PROJECT_PATH, "disdiff_adapters/data/cars3d/cars3d_train.npz")
-        VAL = join(PROJECT_PATH, "disdiff_adapters/data/cars3d/cars3d_val.npz")
-        TEST = join(PROJECT_PATH, "disdiff_adapters/data/cars3d/cars3d_test.npz")
-        H5 = join(PROJECT_PATH, "disdiff_adapters/data/cars3d/cars3d_train.npz")
+    class Path:
+        ROOT = join(DATA_ROOT, "cars3d")
+        CACHE = join(ROOT, "cache")
+        LOCAL = ROOT
+        TRAIN = join(ROOT, "cars3d_train.npz")
+        VAL = join(ROOT, "cars3d_val.npz")
+        TEST = join(ROOT, "cars3d_test.npz")
 
     @dataclass
-    class Params :
+    class Params:
         FACTORS_IN_ORDER = ["identity", "elevation_angle", "azimuth_angle"]
-        
-        NUM_VALUES_PER_FACTOR = {"identity": 183, "elevation_angle": 4, "azimuth_angle": 24}
+
+        NUM_VALUES_PER_FACTOR = {
+            "identity": 183,
+            "elevation_angle": 4,
+            "azimuth_angle": 24,
+        }

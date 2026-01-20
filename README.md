@@ -1,9 +1,11 @@
 # XFactors  
+
 IBENS internship 2025  
 Alexandre MYARA  
 Supervised by Thomas Boyer, Nicolas Bouriez, Auguste Genovesio.
 
 ## Project description
+
 XFactors est une méthode proposant un disentanglement partiel ou complet d'espace latent.  
 Notre architecture permet de disentangler les facteurs $(f_1, \ldots f_k)$ d'une image de manière supervisée et offre la possibilité de choisir la ou les directions de l'espace où seront encodées chacun de ces facteurs.
 
@@ -19,6 +21,7 @@ Nous nous assurons également que chaque facteur $f_i$ est effectivement disenta
 **NB: On appelle "facteur" d'une image, tout élement visuel composant de l'image.**
 
 ## Code base organisation
+
 Le repo est organisé sur plusieurs dossiers comme suit:
 
 1. Arch: contient un module vae et un module multi_distillme.  
@@ -36,9 +39,11 @@ Contient également le notebook metric.ipynb qui permet de calculer les métriqu
 10. utils: contient les constantes et fonctions d'affichages.
 
 ## How to use sweep_x.sh
+
 Le fichier sweep_x.sh fait appel itérativement à train_x.sh.  
 Les hyperparamètres du modèles sont fixables depuis train_x.sh.  
 train_x.sh propose la modification de:
+
 1. dataset utilisé. Pour 3Dshapes, le raccourci "shapes" fonctionne.  
 2. $\beta_t$
 3. $\dim_s$
@@ -68,6 +73,7 @@ Exemple: ./sweep_x.sh 1.0 100.0 500.0
 Et jamais: ./sweep_x.sh 1 100 500
 
 ## Naviguer dans le dossier logs
+
 Le dossier logs peut être profond dans l'arborescence, voici comment elle fonctionne.
 
 1. Racine: logs, contient les dossiers "version" comme "x_with_beta_t1"
@@ -87,8 +93,35 @@ x_epoch=100_beta=()_latent=()_batch=.
 Chaque epoch log en entrainement et en validation les espaces latents, la reconstruction et la génération.
 
 ## Calculer les métriques
+
 La manière la plus simple de calculer les métriques est d'utiliser le notebook metric.ipynb.  
 Il suffit d'aller dans la section FactorVAE/XFactors.
 
 La classe FactorVAEScore n'a besoin en entrée seulement que du .ckpt (trouvable dans les logs).  
 La classe DCIScore n'a besoin en entrée seulement que du .ckpt (trouvable dans les logs).
+
+## Losses (XFactors)
+
+Les loss utilisées par XFactors sont :
+
+- KL sur l'espace $T$ (pondérée par `beta_t`)
+- KL sur l'espace $S$ (pondérée par `beta_s`)
+- InfoNCE supervisé par facteur (`l_nce_by_factors`).
+- MSE (reconstruction, pondérée à 1)
+
+### Exemple sur 3DShapes
+
+```sh
+python -m disdiff_adapters.arch.multi_distillme.train_x \
+ --dataset shapes \
+ --max_epochs 50 --batch_size 64 \
+ --beta_t 1.0 --beta_s 1.0 \
+ --l_nce_by_factors 0.1
+```
+
+### Chemins et premières utilisations
+
+- Les chemins données/logs utilisent peuvent être personnalisées via les variables d'environnement :
+- `PROJECT_PATH` (racine du dépôt)
+- `LOG_DIR` (par défaut `disdiff_adapters/logs` sous la racine)
+- `CELEBA_DATA_DIR` (optionnel, pour un chemin CelebA externe)
