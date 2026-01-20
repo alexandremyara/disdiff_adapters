@@ -7,6 +7,7 @@ from tqdm import tqdm
 
 from os import remove
 from os.path import exists
+from shutil import rmtree
 
 from disdiff_adapters.dataset import Cars3DDataset
 from disdiff_adapters.utils.const import Cars3D
@@ -49,7 +50,7 @@ class Cars3DDataModule(LightningDataModule):
                 trust_remote_code=True,
             )
             ds.save_to_disk(Cars3D.Path.LOCAL)
-            remove(Cars3D.Path.CACHE)
+            #rmtree(Cars3D.Path.CACHE)
 
             ds = load_from_disk(Cars3D.Path.LOCAL)
             ds_tr = ds["train"]

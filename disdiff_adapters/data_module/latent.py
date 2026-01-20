@@ -36,6 +36,10 @@ class LatentDataModule(LightningDataModule):
             self.Data_class = CelebA
         elif data_name == "mpi3d":
             self.Data_class = MPI3D
+        elif data_name == "cars3d":
+            self.Data_class = Cars3D
+        else:
+            raise ValueError
 
         h5_path = self.Data_class.Path.H5
         train_path = self.Data_class.Path.TRAIN

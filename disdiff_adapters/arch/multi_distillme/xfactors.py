@@ -11,6 +11,7 @@ from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.utilities import rank_zero_info
 from PIL import Image
 from tqdm import tqdm
+from PIL import Image, ImageDraw, ImageFont
 
 import wandb
 from disdiff_adapters.arch.vae import Decoder, Encoder, ResidualBlock
@@ -133,6 +134,10 @@ class Xfactors(LightningModule):
         assert len(l_nce_by_factors) == len(dims_by_factors) and len(
             dims_by_factors
         ) == len(select_factors)
+        if map_idx_labels:
+            assert isinstance(map_idx_labels, list), (
+                f"If specified, map_idx_labels should be a list."
+            )
 
         self.save_hyperparameters(ignore=["res_block"])
 
@@ -466,7 +471,7 @@ class Xfactors(LightningModule):
             idx_cond = torch.randint_like(
                 torch.zeros([nb_samples]), high=nb_sample_latent, dtype=torch.int32
             )
-        eps_cond = z_t[idx_cond, start:end].to(self.device)
+        eps_cond = z_t[idx_cond, start:end].to(self.device)  # facteur latent
 
         if img_ref is None:
             eps_s = torch.stack(nb_samples * [z_s[pos]]).to(self.device)
@@ -487,7 +492,13 @@ class Xfactors(LightningModule):
         z = self.model.merge_operation(eps_s, eps_t)
 
         ref_img = img_ref.squeeze(0) if img_ref is not None else buff_imgs[mask][pos]
-        return self.model.decoder(z).detach().cpu(), ref_img.unsqueeze(0).detach().cpu()
+        target_img = buff_imgs[idx_cond]
+
+        return (
+            self.model.decoder(z).detach().cpu(),
+            ref_img.unsqueeze(0).detach().cpu(),
+            target_img.unsqueeze(0).detach().cpu(),
+        )
 
     def generate_cond(
         self,
@@ -618,6 +629,103 @@ class Xfactors(LightningModule):
         plt.show()
         return mus_logvars_s, mus_logvars_t, images_gen, z_s, z_t, z
 
+    def merge(
+        self,
+        images_s: torch.Tensor,
+        images_t: torch.Tensor,
+        select_factor: int,
+        verbose=False,
+    ):
+        METRIC_EPS = 1e-6
+
+        def _to_nchw(x: torch.Tensor) -> torch.Tensor:
+            """
+            Convert x to NCHW.
+            Accepts: CHW, HWC, NCHW, NHWC.
+            """
+            if x.ndim == 3:
+                # CHW
+                if x.shape[0] in (1, 3):
+                    return x.unsqueeze(0)
+                # HWC
+                if x.shape[-1] in (1, 3):
+                    return x.permute(2, 0, 1).unsqueeze(0)
+                raise ValueError(
+                    f"Ambiguous 3D image shape {tuple(x.shape)} (neither CHW nor HWC)."
+                )
+
+            if x.ndim == 4:
+                # NCHW
+                if x.shape[1] in (1, 3):
+                    return x
+                # NHWC
+                if x.shape[-1] in (1, 3):
+                    return x.permute(0, 3, 1, 2)
+                raise ValueError(
+                    f"Ambiguous 4D batch shape {tuple(x.shape)} (neither NCHW nor NHWC)."
+                )
+
+            raise ValueError(
+                f"Expected 3D or 4D tensor, got ndim={x.ndim} with shape {tuple(x.shape)}"
+            )
+
+        def _minmax01_per_sample(
+            x: torch.Tensor, eps: float = METRIC_EPS
+        ) -> torch.Tensor:
+            """
+            Min-max scale each sample independently to [0, 1] over (C,H,W).
+            Expects NCHW float tensor.
+            """
+            x = x.float()
+            mn = x.amin(dim=(1, 2, 3), keepdim=True)
+            mx = x.amax(dim=(1, 2, 3), keepdim=True)
+            denom = (mx - mn).clamp_min(eps)
+            return (x - mn) / denom
+
+        assert images_s.shape == images_t.shape, "images have to be in the same format!"
+        # assert select_factor in self.hparams.select_factors, "This factor is not followed."
+
+        # 1) put in NCHW
+        images_s = _to_nchw(images_s)
+        images_t = _to_nchw(images_t)
+
+        # 2) move + dtype first (safe)
+        images_s = images_s.to(device=self.device, dtype=torch.float32)
+        images_t = images_t.to(device=self.device, dtype=torch.float32)
+
+        # 3) normalize safely
+        # images_s = _minmax01_per_sample(images_s)
+        # images_t = _minmax01_per_sample(images_t)
+        if verbose:
+            if self.hparams.map_idx_labels is not None:
+                print(
+                    f"The factor encoded chose is {self.hparams.map_idx_labels[select_factor]}"
+                )
+            else:
+                print(f"The factor encoded is {select_factor}")
+            self.model.eval()
+
+        with torch.no_grad():
+            if select_factor in self.hparams.select_factors:
+                idx = self.hparams.select_factors.index(select_factor)  # <--- IMPORTANT
+                start = sum(self.hparams.dims_by_factors[:idx])
+                end = start + self.hparams.dims_by_factors[idx]
+                mu_s, _ = self.model.encoder_s(images_s)  # expects NCHW
+                mu_t_ref, _ = self.model.encoder_t(images_s)
+
+                mu_t, _ = self.model.encoder_t(images_t)
+                z_t = torch.cat(
+                    [mu_t_ref[:, :start], mu_t[:, start:end], mu_t_ref[:, end:]], dim=1
+                )
+                z_s = mu_s
+            else:
+                z_s, _ = self.model.encoder_s(images_t)
+                z_t, _ = self.model.encoder_t(images_s)
+            z = self.model.merge_operation(z_s, z_t)
+            images_hat_logits = self.model.decoder(z)
+
+        return images_hat_logits
+
     #### Lightning Hooks
 
     def on_train_epoch_start(self):
@@ -643,10 +751,9 @@ class Xfactors(LightningModule):
 
             # Train buffers already concatenated in on_validation_epoch_end
             self.log_gen_images()
-
-            ### latent space
             self.log_latent()
-            # self.log_factorvae()
+            self.log_mosaic()
+            self.log_merge()
 
     def on_validation_epoch_start(self):
         self.current_val_batch = 0
@@ -674,7 +781,6 @@ class Xfactors(LightningModule):
             self.latent_train_buff["t"] = torch.cat(self.latent_train_buff["t"])
             self.images_train_buff = torch.cat(self.images_train_buff)
             self.labels_train_buff = torch.cat(self.labels_train_buff)
-
             self.latent_val_buff["s"] = torch.cat(self.latent_val_buff["s"])
             self.latent_val_buff["t"] = torch.cat(self.latent_val_buff["t"])
 
@@ -695,7 +801,10 @@ class Xfactors(LightningModule):
 
             ### latent space
             self.log_latent(is_val=True)
-            # self.log_factorvae(is_val=True)
+
+            ### Images
+            self.log_mosaic(is_val=True)
+            self.log_merge(is_val=True)
 
     def on_test_epoch_end(self):
         if self.global_rank != 0:
@@ -719,7 +828,6 @@ class Xfactors(LightningModule):
         )
 
     #### Log
-
     def log_reco(self, is_val: bool = False):
         buff_imgs = self.images_val_buff if is_val else self.images_train_buff
         mus_logvars_s, mus_logvars_t, images_gen, z_s, z_t, z = self.show_reconstruct(
@@ -821,31 +929,29 @@ class Xfactors(LightningModule):
                         size=(1,),
                     ).item()
 
-                    images_cond_f_gen, input_s = self.generate_by_factors(
-                        cond=cond,
-                        pos=pos,
-                        factor_value=factor_value,
-                        is_val=is_val,
-                        binary_factor=self.hparams.binary_factor,
-                    )
-                    images_cond_f_gen_ref = torch.cat(
-                        [images_cond_f_gen.detach().cpu(), input_s]
-                    )
+                images_cond_f_gen, input_s, _ = self.generate_by_factors(
+                    cond=cond,
+                    pos=pos,
+                    factor_value=factor_value,
+                    is_val=is_val,
+                    binary_factor=self.hparams.binary_factor,
+                )
+                images_cond_f_gen_ref = torch.cat(
+                    [images_cond_f_gen.detach().cpu(), input_s]
+                )
+                save_gen_f_path = join(
+                    self.logger.log_dir,
+                    f"epoch_{epoch}",
+                    f"gen_f={cond}_{epoch}_{i}.png",
+                )
+                if is_val:
                     save_gen_f_path = join(
                         self.logger.log_dir,
                         f"epoch_{epoch}",
+                        "val",
                         f"gen_f={cond}_{epoch}_{i}.png",
                     )
-                    if is_val:
-                        save_gen_f_path = join(
-                            self.logger.log_dir,
-                            f"epoch_{epoch}",
-                            "val",
-                            f"gen_f={cond}_{epoch}_{i}.png",
-                        )
-                    vutils.save_image(
-                        images_cond_f_gen_ref.detach().cpu(), save_gen_f_path
-                    )
+                vutils.save_image(images_cond_f_gen_ref.detach().cpu(), save_gen_f_path)
 
         ### Merge in one image
         final_gen_s = None
@@ -972,7 +1078,7 @@ class Xfactors(LightningModule):
             for i in range(4):
                 os.remove(path_epoch_t[i])
 
-    def log_latent(self, is_val: bool = False, dpi: int = 100):
+    def log_latent(self, is_val: bool = False, log_dir: str = "", dpi: int = 100):
         buff_latents = self.latent_val_buff if is_val else self.latent_train_buff
         buff_labels = self.labels_val_buff if is_val else self.labels_train_buff
         buff_imgs = self.images_val_buff if is_val else self.images_train_buff
@@ -980,6 +1086,9 @@ class Xfactors(LightningModule):
         number_labels = buff_labels.shape[1]
         has_s_space = self.hparams.latent_dim_s > 0
         has_t_space = sum(self.hparams.dims_by_factors) > 0
+
+        if self.logger is not None:
+            log_dir = self.logger.log_dir
 
         for i in range(number_labels):
             labels = buff_labels[:, i].unsqueeze(1)
@@ -1115,6 +1224,216 @@ class Xfactors(LightningModule):
             wandb_logger.experiment.log(
                 {key: wandb.Image(img), "epoch": self.current_epoch}
             )
+
+    def log_mosaic(self, is_val: bool = False, log_dir: str = ""):
+        buff_latents = self.latent_val_buff if is_val else self.latent_train_buff
+        buff_labels = self.labels_val_buff if is_val else self.labels_train_buff
+        buff_imgs = self.images_val_buff if is_val else self.images_train_buff
+
+        if self.logger is not None:
+            log_dir = self.logger.log_dir
+
+        factors = (
+            list(self.hparams.select_factors)
+            if self.hparams.map_idx_labels is None
+            else list(range(len(self.hparams.map_idx_labels)))
+        )
+
+        ncols = 6
+        tiles = []
+
+        # if celeba :
+        masks = [
+            (buff_labels[:, 15] == 1),
+            (buff_labels[:, 26] == 0),
+            (buff_labels[:, 36] == 1),
+            (buff_labels[:, 35] == 1),
+        ]
+        # if celeba the first and third with eyeglasses
+        #           the second is black skin
+        #           the fourth has lipstick
+        #           the sixth has a hat
+
+        for i in range(6):
+            if i == 0 or i == 2:
+                simg = buff_imgs[masks[0]][0]
+            elif i == 1:
+                simg = buff_imgs[masks[1]][1]
+            elif i == 3:
+                simg = buff_imgs[masks[2]][2]
+            elif i == 5:
+                simg = buff_imgs[masks[3]][3]
+            else:
+                simg = buff_imgs[masks[0]][1]
+
+            tiles.append(simg.cpu())
+
+        for _ in range(ncols):
+            tiles.append(buff_imgs[150].cpu())
+
+        for f in factors:
+            for i, simg in enumerate(buff_imgs):
+                if i == 6:
+                    break
+                out = self.merge(
+                    simg.unsqueeze(0).to(self.device),
+                    buff_imgs[6].unsqueeze(0).to(self.device),
+                    select_factor=f,
+                )
+                out = out.detach()
+                if out.ndim == 4 and out.size(0) == 1:
+                    out = out.squeeze(0)
+                tiles.append(out.cpu())
+
+        grid_tensor = torch.stack(tiles, dim=0)  # [R*ncols, C, H, W]
+        _, C, H, W = (
+            grid_tensor.shape[0],
+            grid_tensor.shape[1],
+            grid_tensor.shape[2],
+            grid_tensor.shape[3],
+        )
+
+        # --- grid torchvision ---
+        padding = 2
+        pad_value = 0
+        left_margin = 100
+        font_size = 10
+        font_path = None
+        text_color = (0, 0, 0)
+        quality = 95
+        save_mosaic_path = os.path.join(
+            log_dir, f"epoch_{self.current_epoch}", f"mosa_{self.current_epoch}.png"
+        )
+        if is_val:
+            save_mosaic_path = os.path.join(
+                log_dir,
+                f"epoch_{self.current_epoch}",
+                "val",
+                f"mosa_{self.current_epoch}.png",
+            )
+
+        grid = vutils.make_grid(
+            grid_tensor, nrow=ncols, padding=padding, pad_value=pad_value
+        )  # [C, Hgrid, Wgrid] in [0,1]
+
+        grid_u8 = (grid.clamp(0, 1) * 255).to(torch.uint8)
+        grid_hwc = grid_u8.permute(1, 2, 0).cpu().numpy()
+        grid_img = Image.fromarray(grid_hwc)
+
+        # --- préparation font ---
+        if font_size is None:
+            font_size = max(12, int(H * 0.35))  # auto (adapté à 64x64 par ex.)
+        try:
+            if font_path is not None:
+                font = ImageFont.truetype(font_path, font_size)
+            else:
+                # souvent dispo sur Linux
+                font = ImageFont.truetype("DejaVuSans.ttf", font_size)
+        except Exception:
+            font = ImageFont.load_default()
+
+        # --- canvas final avec marge gauche ---
+        final_w = grid_img.width + left_margin
+        final_h = grid_img.height
+        final_img = Image.new("RGB", (final_w, final_h), (255, 255, 255))
+        final_img.paste(grid_img, (left_margin, 0))
+
+        draw = ImageDraw.Draw(final_img)
+
+        nrows = 2 + len(factors)
+
+        def row_center_y(r: int) -> int:
+            y0 = padding + r * (H + padding)
+            return int(y0 + H / 2)
+
+        # helper pour écrire centré verticalement (et à peu près centré en hauteur)
+        def draw_row_label(r: int, text: str):
+            y = row_center_y(r)
+            # bbox pour centrer verticalement
+            bbox = draw.textbbox((0, 0), text, font=font)
+            text_h = bbox[3] - bbox[1]
+            x = 10
+            draw.text((x, y - text_h // 2), text, fill=text_color, font=font)
+
+        draw_row_label(0, "SRC")
+        draw_row_label(1, "TRT")
+
+        map_labels = getattr(self.hparams, "map_idx_labels", None)
+        for ridx, f in enumerate(factors, start=2):
+            if map_labels is not None:
+                if isinstance(map_labels, (list, tuple)) and 0 <= int(f) < len(
+                    map_labels
+                ):
+                    name = str(map_labels[int(f)])
+                else:
+                    name = str(f)
+            else:
+                name = str(f)
+            draw_row_label(ridx, name)
+
+        # --- save ---
+        final_img.save(save_mosaic_path, quality=quality)
+        return final_img
+
+    def log_merge(self, is_val: bool = False, log_dir: str = ""):
+        epoch = self.current_epoch
+        if self.logger is not None:
+            log_dir = self.logger.log_dir
+
+        epoch_dir = join(log_dir, f"epoch_{epoch}", "val" if is_val else "")
+        os.makedirs(epoch_dir, exist_ok=True)
+
+        nb_samples_gen = getattr(
+            self.hparams, "nb_samples", 16
+        )  # tu peux garder 16 pour générer
+        rows_to_save = []
+
+        # si tu veux un seul cond au lieu de boucler : cond = self.hparams.select_factors[0]
+        for cond in self.hparams.select_factors:
+            rows_to_save.clear()
+
+            for i in range(4):
+                factor_value = (
+                    self.hparams.factor_value
+                    if i % 2
+                    else getattr(self.hparams, "factor_value_1", -1)
+                )
+                pos = torch.randint(
+                    low=0,
+                    high=min(len(self.latent_val_buff), len(self.latent_train_buff)),
+                    size=(1,),
+                ).item()
+
+                img_out, img_ref, img_target = self.generate_by_factors(
+                    cond=cond,
+                    nb_samples=nb_samples_gen,
+                    pos=pos,
+                    factor_value=factor_value,
+                    is_val=is_val,
+                    binary_factor=self.hparams.binary_factor,
+                )
+
+                # sanitize shapes
+                # img_out: (N,C,H,W)
+                # img_ref: (1,C,H,W)
+                # img_target: (1,N,C,H,W) ou (N,C,H,W)
+                if img_target.ndim == 5:
+                    img_target = img_target.squeeze(0)
+                if img_ref.ndim == 5:
+                    img_ref = img_ref.squeeze(0)
+
+                # on prend UN seul élément du batch (ici 0)
+                out1 = img_out[0:1]  # (1,C,H,W)
+                ref1 = img_ref[0:1]  # (1,C,H,W)
+                tgt1 = img_target[0:1]  # (1,C,H,W)
+
+                # une "ligne" = 3 images (OUT | REF | TARGET)
+                rows_to_save.append(torch.cat([out1, ref1, tgt1], dim=0))  # (3,C,H,W)
+
+            # 4 lignes -> 12 images au total, on sauvegarde en nrow=3 => 4 rows
+            all_imgs = torch.cat(rows_to_save, dim=0)  # (12,C,H,W)
+            save_path = join(epoch_dir, f"merge_f={cond}_{epoch}.png")
+            vutils.save_image(all_imgs, save_path, nrow=3, padding=6, pad_value=0)
 
 
 class FactorVAEScoreLight:

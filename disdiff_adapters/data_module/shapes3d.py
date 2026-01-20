@@ -69,6 +69,9 @@ class Shapes3DDataModule(LightningDataModule):
             self.train_dataset = Shapes3DDataset(self.train_path)
             print("load dataset val")
             self.val_dataset = Shapes3DDataset(self.val_path)
+        elif stage == "val":
+            print("load dataset val")
+            self.val_dataset = Shapes3DDataset(self.val_path)
         else:
             self.test_dataset = Shapes3DDataset(self.test_path)
         print("Tensors loaded!", flush=True)

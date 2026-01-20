@@ -3,9 +3,10 @@ from torch.utils.data import Dataset
 
 
 class Cars3DDataset(Dataset):
-    def __init__(self, images: torch.Tensor, labels: torch.Tensor):
+    def __init__(self, images: torch.Tensor, labels: torch.Tensor, transform=None):
         self.images, self.labels = images, labels
         assert len(images) == len(labels), "Number of images and labels doesn't match"
+        self.transform = transform
 
     def __len__(self) -> int:
         return self.images.shape[0]

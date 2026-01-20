@@ -13,6 +13,8 @@ from sklearn.decomposition import PCA
 from torch import sort
 
 from disdiff_adapters.loss import *
+import json
+from pathlib import Path
 
 
 def load_h5(h5_path: str):
@@ -73,9 +75,13 @@ def split(data: torch.Tensor, label: torch.Tensor, ratio: float = 0.8):
 def display(batch: tuple[torch.Tensor]) -> None:
     """
     Affiche un batch d'images RGB.
-    batch = (images [B,3,H,W], labels [B,])
+    batch = (images [B,C,H,W], labels [B,])
     """
     images, labels = batch
+    if not isinstance(images, torch.Tensor):
+        images = torch.from_numpy(images)
+    if not isinstance(labels, torch.Tensor):
+        labels = torch.from_numpy(labels)
     nb_samples = images.size(0)
 
     # grille quasi carrée
@@ -163,11 +169,11 @@ def sample_from(mu_logvar: tuple[torch.Tensor], test: bool = False) -> torch.Ten
 
 
 def del_outliers(arr: np.ndarray, k: int) -> np.ndarray:
-    assert type(arr) == np.ndarray, "should be an array"
-    assert k <= len(arr), "k>len(arr)"
-    assert len(arr.shape) == 1, "error shape"
-    idxs = np.argpartition(arr, -k)[-k:]
-    arr[idxs] = 0
+    # assert type(arr) == np.ndarray, "should be an array"
+    # assert k<=len(arr), "k>len(arr)"
+    # assert len(arr.shape) == 1, "error shape"
+    # idxs = np.argpartition(arr, -k)[-k:]
+    # arr[idxs] = 0
     return arr
 
 

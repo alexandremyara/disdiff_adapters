@@ -10,7 +10,6 @@
 disdiff_adapters/logs/*
 **/out/*
 **/PyTorch-VAE/*
-**/notebook/*
 **/lightning_logs/*
 **/data/*
 logs

@@ -59,20 +59,28 @@ class CelebADataModule(LightningDataModule):
             ]
         )
 
-        self.train_dataset = CelebADataset(
-            self.data_dir,
-            split="train",
-            transform=train_transforms,
-            download=False,
-        )
+        if stage in ("fit", None):
+            self.train_dataset = CelebADataset(
+                self.data_dir,
+                split="train",
+                transform=train_transforms,
+                download=False,
+            )
 
-        # Replace CelebA with your dataset
-        self.val_dataset = CelebADataset(
-            self.data_dir,
-            split="test",
-            transform=val_transforms,
-            download=False,
-        )
+            # Replace CelebA with your dataset
+            self.val_dataset = CelebADataset(
+                self.data_dir,
+                split="test",
+                transform=val_transforms,
+                download=False,
+            )
+        else:
+            self.val_dataset = CelebADataset(
+                self.data_dir,
+                split="test",
+                transform=val_transforms,
+                download=False,
+            )
 
     #       ===============================================================
 
