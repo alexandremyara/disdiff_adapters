@@ -6,12 +6,14 @@ from torch import Tensor
 from torch.utils.data import Dataset
 from torchvision import datasets, transforms
 
+
 class MNISTDataset(Dataset):
     """
     Wrapper autour torchvision.datasets.MNIST qui:
     - renvoie des images Tensor [C,H,W] (1x28x28 ou 3x28x28 si to_rgb=True)
     - renvoie des labels LongTensor de forme [1] (compat. labels[:,0])
     """
+
     def __init__(
         self,
         root: str,
@@ -33,16 +35,18 @@ class MNISTDataset(Dataset):
             if to_rgb:
                 # même stats répétées sur 3 canaux
                 mean = (0.1307, 0.1307, 0.1307)
-                std  = (0.3081, 0.3081, 0.3081)
+                std = (0.3081, 0.3081, 0.3081)
             else:
                 mean = (0.1307,)
-                std  = (0.3081,)
+                std = (0.3081,)
             tfs.append(transforms.Normalize(mean, std))
 
         transform = transforms.Compose(tfs)
 
         # cible sous forme [1] (LongTensor), pour accéder à labels[:,0] downstream
-        target_transform = transforms.Lambda(lambda y: torch.tensor([y], dtype=torch.long))
+        target_transform = transforms.Lambda(
+            lambda y: torch.tensor([y], dtype=torch.long)
+        )
 
         self._ds = datasets.MNIST(
             root=root,
