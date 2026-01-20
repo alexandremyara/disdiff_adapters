@@ -4,7 +4,7 @@ dir="/projects/compures/alexandre/disdiff_adapters/disdiff_adapters/scripts/trai
 
 loss="vae_nce"
 version="x_with_beta_t100"
-gpu="2"
+gpu="1"
 session="x_train_$(date +%H%M%S)"
 cmd="/projects/compures/alexandre/disdiff_adapters/disdiff_adapters/scripts/train/train_x.sh"
 

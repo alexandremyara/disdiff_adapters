@@ -5,10 +5,10 @@ source /projects/compures/alexandre/.venv/bin/activate
 
 batch_size=32
 max_epochs=70
-dataset="mpi3d"
+dataset="celeba"
 beta_s="$1"
 beta_t=100.0
-latent_dims_s=("8")
+latent_dims_s=("126")
 dims_by_factors="2"
 select_factors="_s=-1"
 warm_up="False"

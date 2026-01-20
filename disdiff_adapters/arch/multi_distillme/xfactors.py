@@ -341,7 +341,7 @@ class Xfactors(LightningModule) :
         z = self.model.merge_operation(eps_s, eps_t)
 
         ref_img = img_ref.squeeze(0) if img_ref is not None else buff_imgs[mask][pos]
-        target_img = buff_imgs[mask][idx_cond]
+        target_img = buff_imgs[idx_cond]
         return self.model.decoder(z).detach().cpu(), ref_img.unsqueeze(0).detach().cpu(), target_img.unsqueeze(0).detach().cpu()         
 
     def generate_cond(self, nb_samples: int=16, cond: str="t", pos: int=0, 
@@ -709,7 +709,7 @@ class Xfactors(LightningModule) :
         else :
             path_latents = [join(log_dir, f"epoch_{self.current_epoch}", f"latent_space_{i}_{self.current_epoch}.png") for i in range(number_labels)]
             path_final_latent = join(log_dir, f"epoch_{self.current_epoch}", f"latent_space_{self.current_epoch}.png")
-        
+
         final_images = merge_images(path_latents)
         final_images.save(path_final_latent)
         for i in range(number_labels) : os.remove(path_latents[i])
@@ -724,20 +724,32 @@ class Xfactors(LightningModule) :
 
         factors = list(self.hparams.select_factors) if self.hparams.map_idx_labels is None else list(range(len(self.hparams.map_idx_labels)))
 
-        ncols = 5
+        ncols = 6
         tiles = []
 
-        for idx, simg in enumerate(buff_imgs):
-            if idx == 5 : break
+        #if celeba :
+        masks = [(buff_labels[:, 15] == 1), (buff_labels[:, 26] == 0), (buff_labels[:, 36]==1), (buff_labels[:, 35]==1)]
+        #if celeba the first and third with eyeglasses
+        #           the second is black skin
+        #           the fourth has lipstick
+        #           the sixth has a hat
+
+        for i in range(6) :
+            if i == 0 or i == 2 : simg = buff_imgs[masks[0]][0]
+            elif  i == 1 : simg = buff_imgs[masks[1]][1]
+            elif i == 3 : simg = buff_imgs[masks[2]][2]
+            elif i == 5 : simg = buff_imgs[masks[3]][3]
+            else : simg = buff_imgs[masks[0]][1]
+
             tiles.append(simg.cpu())
 
         for _ in range(ncols):
-            tiles.append(buff_imgs[5].cpu())
+            tiles.append(buff_imgs[150].cpu())
 
         for f in factors:
             for i,simg in enumerate(buff_imgs):
-                if i == 5 : break
-                out = self.merge(simg.unsqueeze(0).to(self.device), buff_imgs[5].unsqueeze(0).to(self.device), select_factor=f) 
+                if i == 6 : break
+                out = self.merge(simg.unsqueeze(0).to(self.device), buff_imgs[6].unsqueeze(0).to(self.device), select_factor=f) 
                 out = out.detach()
                 if out.ndim == 4 and out.size(0) == 1: out = out.squeeze(0)
                 tiles.append(out.cpu())
