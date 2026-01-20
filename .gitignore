@@ -17,3 +17,4 @@ disdiff_adapters/logs/*
 logs
 wandb
 .envrc
+json/
