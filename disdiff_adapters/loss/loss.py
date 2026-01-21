@@ -2,6 +2,8 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 
+__all__ = ["kl", "mse", "cross_cov", "decorrelate_params", "InfoNCESupervised"]
+
 
 def kl(mu: torch.Tensor, logvar: torch.Tensor, by_latent: bool = False) -> torch.Tensor:
     logvar = torch.clamp(logvar, min=-20.0, max=20.0)
