@@ -2,6 +2,8 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+__all__ = ["Shapes3DDataset"]
+
 
 class Shapes3DDataset(Dataset):
     def __init__(self, npz_path: str):
