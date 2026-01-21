@@ -2,7 +2,6 @@ import torch
 import numpy as np
 from tqdm import tqdm
 
-
 __all__ = ["FactorVAEScoreLight"]
 
 

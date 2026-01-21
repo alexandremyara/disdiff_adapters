@@ -10,7 +10,6 @@ import re
 
 from disdiff_adapters.data_module import LatentDataModule
 
-
 __all__ = ["FactorVAEScore"]
 
 
