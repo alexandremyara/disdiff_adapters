@@ -1,6 +1,8 @@
 import torch
 from torch.utils.data import Dataset
 
+__all__ = ["DSpritesDataset"]
+
 
 class DSpritesDataset(Dataset):
     def __init__(self, images: torch.Tensor, labels: torch.Tensor):
