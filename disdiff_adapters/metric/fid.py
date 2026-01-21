@@ -3,6 +3,9 @@ from torchmetrics.image.fid import FrechetInceptionDistance
 from lightning.pytorch.callbacks import Callback
 
 
+__all__ = ["FID", "FIDCallback"]
+
+
 class FID:
     def __init__(
         self,

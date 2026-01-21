@@ -11,6 +11,9 @@ import re
 from disdiff_adapters.data_module import LatentDataModule
 
 
+__all__ = ["FactorVAEScore"]
+
+
 class FactorVAEScore:
     def __init__(
         self, ckpt_path: str, is_pca: bool = False, n_iter=153600, batch_size=64

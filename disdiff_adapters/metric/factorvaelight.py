@@ -3,6 +3,9 @@ import numpy as np
 from tqdm import tqdm
 
 
+__all__ = ["FactorVAEScoreLight"]
+
+
 class FactorVAEScoreLight:
     def __init__(
         self,
