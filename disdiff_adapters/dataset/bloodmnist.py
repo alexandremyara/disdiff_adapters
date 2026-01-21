@@ -1,6 +1,8 @@
 import torch
 from torch.utils.data import Dataset
 
+__all__ = ["BloodMNISTDataset"]
+
 
 class BloodMNISTDataset(Dataset):
     def __init__(self, images, labels):
