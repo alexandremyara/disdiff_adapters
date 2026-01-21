@@ -3,6 +3,21 @@ from os import getenv
 from dataclasses import dataclass
 from pathlib import Path
 
+__all__ = [
+    "PROJECT_PATH",
+    "DATA_ROOT",
+    "LOG_DIR",
+    "CELEBA_DATA_DIR",
+    "LOG_DIR_SHELL",
+    "Shapes3D",
+    "MPI3D",
+    "BloodMNIST",
+    "CelebA",
+    "MNIST",
+    "DSprites",
+    "Cars3D",
+]
+
 # General Const (can be overridden with env vars)
 PROJECT_PATH = getenv("PROJECT_PATH", str(Path(__file__).resolve().parents[2]))
 DATA_ROOT = getenv("DATA_ROOT", join(PROJECT_PATH, "disdiff_adapters/data"))
