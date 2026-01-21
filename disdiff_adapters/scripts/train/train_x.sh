@@ -10,7 +10,7 @@ beta_s="$1"
 beta_t=100.0
 latent_dims_s=("126")
 dims_by_factors="2"
-select_factors="_s=-1"
+select_factors="_s=-4"
 warm_up="False"
 lr=1e-05
 arch="res"
