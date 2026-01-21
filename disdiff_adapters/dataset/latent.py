@@ -21,8 +21,8 @@ class LatentDataset(Dataset):
         )
         if not isinstance(z_s, torch.Tensor):
             z_s = torch.tensor(z_s, dtype=torch.float32)
-        if not isinstance(z_s, torch.Tensor):
-            z_t = torch.tensor(z_t, dtyp=torch.float32)
+        if not isinstance(z_t, torch.Tensor):
+            z_t = torch.tensor(z_t, dtype=torch.float32)
         if not isinstance(labels, torch.Tensor):
             labels = torch.tensor(labels, dtype=torch.long)
 
