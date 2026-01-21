@@ -1,6 +1,8 @@
 import torch
 from torch.utils.data import Dataset
 
+__all__ = ["Cars3DDataset"]
+
 
 class Cars3DDataset(Dataset):
     def __init__(self, images: torch.Tensor, labels: torch.Tensor, transform=None):
