@@ -13,8 +13,6 @@ from sklearn.decomposition import PCA
 from torch import sort
 
 from disdiff_adapters.loss import *
-import json
-from pathlib import Path
 
 __all__ = [
     "load_h5",
