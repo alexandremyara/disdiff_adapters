@@ -925,30 +925,27 @@ class Xfactors(LightningModule):
                         ),
                         size=(1,),
                     ).item()
-
-                images_cond_f_gen, input_s, _ = self.generate_by_factors(
-                    cond=cond,
-                    pos=pos,
-                    factor_value=factor_value,
-                    is_val=is_val,
-                    binary_factor=self.hparams.binary_factor,
-                )
-                images_cond_f_gen_ref = torch.cat(
-                    [images_cond_f_gen.detach().cpu(), input_s]
-                )
-                save_gen_f_path = join(
-                    self.logger.log_dir,
-                    f"epoch_{epoch}",
-                    f"gen_f={cond}_{epoch}_{i}.png",
-                )
-                if is_val:
+                    images_cond_f_gen, input_s, _ = self.generate_by_factors(
+                        cond=cond,
+                        pos=pos,
+                        factor_value=factor_value,
+                        is_val=is_val,
+                        binary_factor=self.hparams.binary_factor,
+                    )
+                    images_cond_f_gen_ref = torch.cat(
+                        [images_cond_f_gen.detach().cpu(), input_s]
+                    )
+                    save_dir = join(self.logger.log_dir, f"epoch_{epoch}")
+                    if is_val:
+                        save_dir = join(save_dir, "val")
+                    os.makedirs(save_dir, exist_ok=True)
                     save_gen_f_path = join(
-                        self.logger.log_dir,
-                        f"epoch_{epoch}",
-                        "val",
+                        save_dir,
                         f"gen_f={cond}_{epoch}_{i}.png",
                     )
-                vutils.save_image(images_cond_f_gen_ref.detach().cpu(), save_gen_f_path)
+                    vutils.save_image(
+                        images_cond_f_gen_ref.detach().cpu(), save_gen_f_path
+                    )
 
         ### Merge in one image
         final_gen_s = None
