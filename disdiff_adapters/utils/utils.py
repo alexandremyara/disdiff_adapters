@@ -13,8 +13,6 @@ from sklearn.decomposition import PCA
 from torch import sort
 
 from disdiff_adapters.loss import *
-import json
-from pathlib import Path
 
 
 def load_h5(h5_path: str):
@@ -478,7 +476,7 @@ def merge_images_with_black_gap(image_paths, gap=10):
     images = [Image.open(p) for p in image_paths]
     widths = [img.width for img in images]
     if len(set(widths)) != 1:
-        raise ValueError("Toutes les images doivent avoir la même largeur")
+        raise ValueError(f"Toutes les images doivent avoir la même largeur: {widths}")
     W = widths[0]
     separator = Image.new("RGB", (W, gap), color=(0, 0, 0))
     parts = []

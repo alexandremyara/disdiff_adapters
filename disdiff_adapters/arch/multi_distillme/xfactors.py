@@ -1072,10 +1072,15 @@ class Xfactors(LightningModule):
             for i in range(4):
                 os.remove(path_epoch_t[i])
 
-    def log_latent(self, is_val: bool = False, log_dir: str = "", dpi: int = 100):
+    def log_latent(
+        self,
+        is_val: bool = False,
+        log_dir: str = "",
+        dpi: int = 100,
+        wandb: bool = True,
+    ):
         buff_latents = self.latent_val_buff if is_val else self.latent_train_buff
         buff_labels = self.labels_val_buff if is_val else self.labels_train_buff
-        buff_imgs = self.images_val_buff if is_val else self.images_train_buff
 
         number_labels = buff_labels.shape[1]
         has_s_space = self.hparams.latent_dim_s > 0
@@ -1086,10 +1091,9 @@ class Xfactors(LightningModule):
 
         for i in range(number_labels):
             labels = buff_labels[:, i].unsqueeze(1)
-            z_s_path = join(self.logger.log_dir, "z_s.png")
+            z_s_path = join(log_dir, "z_s.png")
             z_f_path = [
-                join(self.logger.log_dir, f"z_f={cond}.png")
-                for cond in self.hparams.select_factors
+                join(log_dir, f"z_f={cond}.png") for cond in self.hparams.select_factors
             ]
 
             paths_to_merge = []
@@ -1101,7 +1105,7 @@ class Xfactors(LightningModule):
                     if self.hparams.map_idx_labels is None
                     else "latent space s " + self.hparams.map_idx_labels[i]
                 )
-                display_latent(labels=labels, z=buff_latents["s"], title=title)
+                display_latent(labels=labels, z=buff_latents["s"], title=title, dpi=dpi)
                 fig = plt.gcf()
                 fig.savefig(z_s_path)
                 plt.close(fig)
@@ -1136,14 +1140,14 @@ class Xfactors(LightningModule):
 
             if is_val:
                 path_latent = join(
-                    self.logger.log_dir,
+                    log_dir,
                     f"epoch_{self.current_epoch}",
                     "val",
                     f"latent_space_{i}_{self.current_epoch}.png",
                 )
             else:
                 path_latent = join(
-                    self.logger.log_dir,
+                    log_dir,
                     f"epoch_{self.current_epoch}",
                     f"latent_space_{i}_{self.current_epoch}.png",
                 )
@@ -1155,7 +1159,7 @@ class Xfactors(LightningModule):
         if is_val:
             path_latents = [
                 join(
-                    self.logger.log_dir,
+                    log_dir,
                     f"epoch_{self.current_epoch}",
                     "val",
                     f"latent_space_{i}_{self.current_epoch}.png",
@@ -1163,7 +1167,7 @@ class Xfactors(LightningModule):
                 for i in range(number_labels)
             ]
             path_final_latent = join(
-                self.logger.log_dir,
+                log_dir,
                 f"epoch_{self.current_epoch}",
                 "val",
                 f"latent_space_{self.current_epoch}.png",
@@ -1171,14 +1175,14 @@ class Xfactors(LightningModule):
         else:
             path_latents = [
                 join(
-                    self.logger.log_dir,
+                    log_dir,
                     f"epoch_{self.current_epoch}",
                     f"latent_space_{i}_{self.current_epoch}.png",
                 )
                 for i in range(number_labels)
             ]
             path_final_latent = join(
-                self.logger.log_dir,
+                log_dir,
                 f"epoch_{self.current_epoch}",
                 f"latent_space_{self.current_epoch}.png",
             )
@@ -1188,11 +1192,12 @@ class Xfactors(LightningModule):
         for i in range(number_labels):
             os.remove(path_latents[i])
 
-        mode = "val" if is_val else "train"
-        self._log_wandb_image(
-            key=f"{mode}/latents",
-            path=path_final_latent,
-        )
+        if wandb:
+            mode = "val" if is_val else "train"
+            self._log_wandb_image(
+                key=f"{mode}/latents",
+                path=path_final_latent,
+            )
 
     def _get_wandb_logger(self):
         if self._cached_wandb_logger is not None:
