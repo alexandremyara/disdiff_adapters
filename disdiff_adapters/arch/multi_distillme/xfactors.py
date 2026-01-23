@@ -1232,6 +1232,12 @@ class Xfactors(LightningModule):
         if self.logger is not None:
             log_dir = self.logger.log_dir
 
+        # Skip mosaic logging when label vectors do not include the CelebA attributes
+        # this visualization expects (indexes up to 36). This prevents index errors on
+        # smaller-label datasets like Shapes.
+        if buff_labels is None or buff_labels.shape[1] <= 36:
+            return
+
         factors = list(self.hparams.select_factors) if self.hparams.map_idx_labels is None else list(range(len(self.hparams.map_idx_labels)))
         perm = torch.randperm(buff_imgs.shape[0])
         ncols = 6
