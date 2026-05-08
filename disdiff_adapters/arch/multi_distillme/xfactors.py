@@ -698,12 +698,9 @@ class Xfactors(LightningModule):
         # images_t = _minmax01_per_sample(images_t)
         if verbose:
             if self.hparams.map_idx_labels is not None:
-                print(
-                    f"The factor encoded chose is {self.hparams.map_idx_labels[select_factor]}"
-                )
-            else:
-                print(f"The factor encoded is {select_factor}")
-            self.model.eval()
+                print(f"The factor encoded chose is {self.hparams.map_idx_labels[select_factor]}")
+            else : print(f"The factor encoded is {select_factor}")
+        self.model.eval()
 
         with torch.no_grad():
             if select_factor in self.hparams.select_factors:
@@ -1233,53 +1230,48 @@ class Xfactors(LightningModule):
         if self.logger is not None:
             log_dir = self.logger.log_dir
 
-        factors = (
-            list(self.hparams.select_factors)
-            if self.hparams.map_idx_labels is None
-            else list(range(len(self.hparams.map_idx_labels)))
-        )
-
+        factors = list(self.hparams.select_factors) if self.hparams.map_idx_labels is None else list(range(len(self.hparams.map_idx_labels)))
+        perm = torch.randperm(buff_imgs.shape[0])
         ncols = 6
         tiles = []
 
-        # if celeba :
-        masks = [
-            (buff_labels[:, 15] == 1),
-            (buff_labels[:, 26] == 0),
-            (buff_labels[:, 36] == 1),
-            (buff_labels[:, 35] == 1),
-        ]
-        # if celeba the first and third with eyeglasses
+        buff_imgs = buff_imgs[perm]
+        buff_labels = buff_labels[perm]
+
+        #if celeba :
+        masks = {"eyeglass" : (buff_labels[:, 15] == 1), 
+                 "skin":(buff_labels[:, 26] == 0),
+                 "lip":(buff_labels[:, 36]==1), 
+                 "hat":(buff_labels[:, 35]==1), 
+                 "male":(buff_labels[:, 20] == 0), 
+                 "smile":(buff_labels[:, 31] == 1)}
+        #if celeba the first and third with eyeglasses
         #           the second is black skin
         #           the fourth has lipstick
         #           the sixth has a hat
 
-        for i in range(6):
-            if i == 0 or i == 2:
-                simg = buff_imgs[masks[0]][0]
-            elif i == 1:
-                simg = buff_imgs[masks[1]][1]
-            elif i == 3:
-                simg = buff_imgs[masks[2]][2]
-            elif i == 5:
-                simg = buff_imgs[masks[3]][3]
-            else:
-                simg = buff_imgs[masks[0]][1]
+        for i in range(6) :
+            if i == 0 : simg = buff_imgs[masks["eyeglass"]][0]
+            elif  i == 1 : simg = buff_imgs[masks["skin"]][1]
+            elif i == 2 : simg = buff_imgs[masks["male"]][2]
+            elif i == 4 : simg = buff_imgs[masks["male"]][3]
+            elif i == 3 : simg = buff_imgs[masks["eyeglass"]][1]
+            elif i == 5 : simg = buff_imgs[masks["skin"]][2]
+            else : pass
 
             tiles.append(simg.cpu())
 
         for _ in range(ncols):
-            tiles.append(buff_imgs[150].cpu())
+            imgs_smile = buff_imgs[masks["smile"]]
+            labels_smile = buff_labels[masks["smile"]]
+            mask = (labels_smile[:, 36] == 1)
+            img_target = imgs_smile[mask][0]
+            tiles.append(img_target.cpu())
 
         for f in factors:
-            for i, simg in enumerate(buff_imgs):
-                if i == 6:
-                    break
-                out = self.merge(
-                    simg.unsqueeze(0).to(self.device),
-                    buff_imgs[6].unsqueeze(0).to(self.device),
-                    select_factor=f,
-                )
+            for i,simg in enumerate(tiles):
+                if i == 6 : break
+                out = self.merge(simg.unsqueeze(0).to(self.device), tiles[-1].unsqueeze(0).to(self.device), select_factor=f) 
                 out = out.detach()
                 if out.ndim == 4 and out.size(0) == 1:
                     out = out.squeeze(0)

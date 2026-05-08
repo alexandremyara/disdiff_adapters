@@ -1,127 +1,83 @@
-# XFactors  
-
-IBENS internship 2025  
-Alexandre MYARA  
-Supervised by Thomas Boyer, Nicolas Bouriez, Auguste Genovesio.
+# XFactors
 
 ## Project description
+XFactors is a method for partial or complete latent space disentanglement. Our architecture enables the supervised disentanglement of image factors $(f_1, \ldots, f_k)$ and allows for the selection of specific directions in the latent space where each factor will be encoded.
 
-XFactors est une méthode proposant un disentanglement partiel ou complet d'espace latent.  
-Notre architecture permet de disentangler les facteurs $(f_1, \ldots f_k)$ d'une image de manière supervisée et offre la possibilité de choisir la ou les directions de l'espace où seront encodées chacun de ces facteurs.
+It is also possible to encode only a subset of factors (e.g., CelebA, which is annotated with 40 factors; one can encode only specific factors of interest) without omitting the encoding of information related to the non-selected factors.
 
-Il est également possible de choisir de n'encoder qu'un sous ensemble des facteurs (exemple CelebA, qui est annoté de 40 facteurs, il est possible de n'encoder que certains facteurs d'interet) sans laisser de coder l'information relatives aux facteurs non encodés.
+XFactors divides the latent space into two subspaces:
+* An orthogonal subspace $T$ (target) containing the disentangled factors.
+* A subspace $S$ containing information related to the image that is either unannotated or corresponds to factors that should not be disentangled.
 
-XFactors divise l'espace latent en deux sous-espaces : un sous-espace orthogonal $T$ (pour target) contenant les facteurs disentanglés, un sous-espace $S$ concernant les informations relatives à l'image qui ne sont pas annotées ou relatives aux facteurs à ne pas disentangler.
+Our method also allows for the selection of specific directions in subspace $T$ where a factor $f_i$ will be encoded. This preserves the integrity of the latent vector's information by modifying only the intended directions to alter a single factor.
 
-Notre méthode propose également de choisir sur quelles directions de l'espace $T$ le facteur $f_i$ sera encodé.  
-Cela offre la possibilité de garder intact toute l'information d'un vecteur latent, en ne changeant que les directions voulues afin de ne modifier qu'un seul facteur.
+We also ensure that each factor $f_i$ is effectively disentangled across all scales and that subspace $S$ contains no information regarding the factors present in subspace $T$.
 
-Nous nous assurons également que chaque facteur $f_i$ est effectivement disentanglé à toutes les échelles, et que l'espace $S$ ne contient aucune information relative aux facteurs présents dans l'espace $T$.
+**NB: An image "factor" refers to any visual element composing the image.**
 
-**NB: On appelle "facteur" d'une image, tout élement visuel composant de l'image.**
+---
 
-## Code base organisation
+## Codebase organization
+The repository is organized as follows:
 
-Le repo est organisé sur plusieurs dossiers comme suit:
+1.  **Arch:** Contains a VAE module and a `multi_distillme` module. The `multi_distillme` module includes `train_x.py` and `xfactors.py`.
+2.  **Data:** Contains `.npz` files for Cars3D, BloodMNIST, 3DShapes, DSprites, CelebA, and MNIST. All files use "label" and "image" keys.
+3.  **Dataset:** Contains PyTorch `Dataset` classes for each dataset. Data is converted to `torch.float32` and scaled to $[0, 1]$.
+4.  **Data_module:** Contains `DataModule` classes for each dataset. Handles automatic generation of missing `.npz` files and includes methods for loading `DataLoaders` (e.g., `Cars3DDataModule.train_dataloader()`).
+5.  **Logs:** Contains training logs.
+6.  **Loss:** Contains `loss.py`.
+7.  **Metric:** Contains code for the FactorVAE score and DCI.
+8.  **Notebook:** Primarily contains `xfactors.ipynb` for training via notebook (logs are saved in `../lightning_logs`) and `metric.ipynb` for calculating metrics from `.ckpt` files (found in the logs).
+9.  **Scripts:** For command-line training using `sweep_x.sh`.
+10. **Utils:** Contains constants and visualization functions.
 
-1. Arch: contient un module vae et un module multi_distillme.  
-Le module multidistillme contient notamment le fichier train_x.py ainsi que le fichier xfactors.py.
-2. Data: contient les .npz pour Cars3D, BloodMNIST, 3DShapes, DSprites, CelebA ainsi que MNIST. Les .npz ont tous pour clés "label" et "image".
-3. Dataset: contient les classes Dataset torch de chacun des jeux de données. Les données sont converti en torch.float32 et scale sur [0,1].
-4. Data_module: contient les classes DataModule de chacun des jeux de données. S'occupe de générer les fichiers .npz s'ils sont manquants. Embarquent les méthodes afin de charger les DataLoader.  
-ex: Cars3DDataModule est munie de Cars3DDataModule.train_dataloader() -> renvoie le dataloader train de Cars3D.
-5. logs: contient les log des entrainements.
-6. loss: contient le fichier loss.py.
-7. metric: contient le code du factorVAE score et DCI.
-8. notebook: contient principalement le notebook xfactors.ipynb qui permet d'entrainer XFactors depuis le notebook. Les logs sont chargés dans un dossier spécial ../lightning_logs.  
-Contient également le notebook metric.ipynb qui permet de calculer les métriques depuis un fichier .ckpt (trouvable dans les logs).
-9. scripts: permet l'entrainement en ligne de commande à l'aide du fichier sweep_x.sh
-10. utils: contient les constantes et fonctions d'affichages.
+---
 
 ## How to use sweep_x.sh
+The `sweep_x.sh` script iteratively calls `train_x.sh`. Model hyperparameters are configurable within `train_x.sh`, including:
 
-Le fichier sweep_x.sh fait appel itérativement à train_x.sh.  
-Les hyperparamètres du modèles sont fixables depuis train_x.sh.  
-train_x.sh propose la modification de:
+1.  Dataset selection (e.g., "shapes" for 3DShapes).
+2.  $\beta_t$
+3.  $\dim_s$
+4.  `batch_size` and number of epochs.
+5.  The dimensions allocated to each factor in $T$.
+6.  An optional key for the training folder name to identify encoded factors at a glance.
 
-1. dataset utilisé. Pour 3Dshapes, le raccourci "shapes" fonctionne.  
-2. $\beta_t$
-3. $\dim_s$
-4. batch_size et nombre d'epochs
-5. la dimension accordée à chaque facteur dans $T$.
-6. Une clé optionnelle à ajouter à la fin du nom du dossier d'entrainement. Permet éventuellement de voir d'un coup d'oeil la liste des facteurs encodés.
+The `version` variable in `sweep_x.sh` determines the log directory:
+* `version=x_with_beta_t1` for $\beta_t=1$
+* `version=x_with_beta_t100` for $\beta_t=100$
+* `version=x_with_beta_t1_dim_t3` for $\dim_t=3$
 
-Une fois fait, le dossier dans lequel sera chargé le log est une variable de sweep_x.sh.
+Setting `version=MyVersion` creates the directory `logs/MyVersion/`.
+The `gpu` variable in `sweep_x.sh` selects the target GPU.
 
-Il faut alors fixer la variable "version=".
+From the terminal (in `script/train/`):
+`./sweep_x.sh \beta_{s_1} \ldots \beta_{s_k}`
 
-1. S'il s'agit d'un entrainement avec $\beta_t=1$, version=x_with_beta_t1
-2. S'il s'agit d'un entrainement avec $\beta_t=100$, version=x_with_beta_t100
-3. S'il s'agit d'un entrainement avec $\dim_t=3$, version=x_with_beta_t1_dim_t3
+This launches $k$ training sessions via **tmux** on the selected GPU. Each tmux window trains the model with a different $\beta_s$.
 
-Tous ces fichiers sont trouvables dans logs.  
-Il est bien sur possible de donner d'autres valeurs à version=. Mettre version à version=MaVersion créera le dossier logs/MaVersion et mettra les logs de l'entrainement dans ce dossier.
+**NB: Arguments must be passed as floats in the terminal (e.g., 1.0, not 1).**
 
-La variable gpu de sweep_x.sh permet de sélectionner le gpu utilisé.
+---
 
-Depuis le terminal une fois placé dans le dossier script/train/  
-Il est possible de lancer ./sweep_x.sh $\beta_{s_1}, \ldots, \beta_{s_k}$  
-$k$ entrainements se lancent sur le gpu sélectionné via tmux. Chaque fenêtre tmux entraine le modèle avec un $\beta_s$ différent (possible de mettre un seul $\beta_s$).
+## Navigating the logs directory
+The directory structure is as follows:
 
-**NB: Dans le terminal lorsque les $\beta_s$ sont renseignés, il est nécessaire de mettre l'argument en tant que floatant.**
-Exemple: ./sweep_x.sh 1.0 100.0 500.0
-Et jamais: ./sweep_x.sh 1 100 500
+1.  **Root:** `logs/` contains "version" folders like `x_with_beta_t1/`.
+2.  **Versions:** Contains dataset folders (`cars3d/`, `mpi3d/`, etc.).
+3.  **Datasets:** Contains `factor=` folders.
 
-## Naviguer dans le dossier logs
+The folder `factor0,1,2,3,4` for dsprites indicates factors 0 through 4 were placed in $T$.
+The folder `factor_s=-1` indicates all factors are in $T$ except the last one, which is in $S$ (default).
 
-Le dossier logs peut être profond dans l'arborescence, voici comment elle fonctionne.
+**NB: To change tracked factors, modify the `select_factors` variable in `train_x.py`. By default, all factors except the last one are assigned to $T$.**
 
-1. Racine: logs, contient les dossiers "version" comme "x_with_beta_t1"
-2. dossiers versions, contient les dossiers "cars3d", "mpi3d" etc
-3. dossiers datasets, contient les dossiers "factor="
+The `factor=` folders contain subfolders like `test_dims2/`, `test_dim126/`, etc. These contain the training logs in the format: `x_epoch=100_beta=()_latent=()_batch=...`.
 
-Le dossier factor0,1,2,3,4 de dsprites contient des entrainements ayant mis les facteurs 0,1,2,3,4 dans $T$.  
-Le dossier factor_s=-1 contient des entrainements ayant mis tout les facteurs dans $T$ excepté le dernier dans $S$. C'est la configuration par défaut.
+Each epoch logs reconstructions, generations, and latent space visualizations for both training and validation.
 
-**NB: Pour changer les facteurs suivis pour un dataset, il faut le spécifier dans train_x.py. Par défaut les facteurs séléctionnés dans $T$ pour un dataset sont tous ces facteurs sauf le dernier qui est dans $S$. Cela est modifiable avec la variable select_factors de train_x.py.**
+---
 
-Les dossiers factor= contiennent ensuite les dossiers test_dims2, test_dim126 etc.
-
-Enfin dans ces derniers on retrouve les log relatifs à un entrainement au format:  
-x_epoch=100_beta=()_latent=()_batch=.
-
-Chaque epoch log en entrainement et en validation les espaces latents, la reconstruction et la génération.
-
-## Calculer les métriques
-
-La manière la plus simple de calculer les métriques est d'utiliser le notebook metric.ipynb.  
-Il suffit d'aller dans la section FactorVAE/XFactors.
-
-La classe FactorVAEScore n'a besoin en entrée seulement que du .ckpt (trouvable dans les logs).  
-La classe DCIScore n'a besoin en entrée seulement que du .ckpt (trouvable dans les logs).
-
-## Losses (XFactors)
-
-Les loss utilisées par XFactors sont :
-
-- KL sur l'espace $T$ (pondérée par `beta_t`)
-- KL sur l'espace $S$ (pondérée par `beta_s`)
-- InfoNCE supervisé par facteur (`l_nce_by_factors`).
-- MSE (reconstruction, pondérée à 1)
-
-### Exemple sur 3DShapes
-
-```sh
-python -m disdiff_adapters.arch.multi_distillme.train_x \
- --dataset shapes \
- --max_epochs 50 --batch_size 64 \
- --beta_t 1.0 --beta_s 1.0 \
- --l_nce_by_factors 0.1
-```
-
-### Chemins et premières utilisations
-
-- Les chemins données/logs utilisent peuvent être personnalisées via les variables d'environnement :
-- `PROJECT_PATH` (racine du dépôt)
-- `LOG_DIR` (par défaut `disdiff_adapters/logs` sous la racine)
-- `CELEBA_DATA_DIR` (optionnel, pour un chemin CelebA externe)
+## Calculating metrics
+The simplest way to calculate metrics is via `metric.ipynb` in the FactorVAE/XFactors section.
+The `FactorVAEScore` and `DCIScore` classes only require the `.ckpt` file (found in the logs) as input.

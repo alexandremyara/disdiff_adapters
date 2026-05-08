@@ -156,9 +156,8 @@ class Decoder(nn.Module):
             nn.BatchNorm2d(48),
             self.activation(),
             self.res_block(48, 48),
-            nn.ConvTranspose2d(
-                48, self.out_channels, kernel_size=4, stride=2, padding=1
-            ),  # *2
+
+            nn.ConvTranspose2d(48, self.out_channels, kernel_size=4, stride=2, padding=1), #*2
             self.activation(self.out_channels, self.out_channels),
             nn.Conv2d(
                 self.out_channels, self.out_channels, kernel_size=3, stride=1, padding=1
