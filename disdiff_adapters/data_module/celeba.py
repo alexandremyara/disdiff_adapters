@@ -1,21 +1,15 @@
-import lightning as L
 from lightning import LightningDataModule
-import torch
 from torch.utils.data import DataLoader
-import numpy as np
 from torchvision import transforms
 
-from os.path import join, exists
 
 from disdiff_adapters.dataset import CelebADataset
-from disdiff_adapters.utils.utils import load_h5, split
 from disdiff_adapters.utils.const import CelebA
-
 
 
 class CelebADataModule(LightningDataModule):
     """
-    PyTorch Lightning data module 
+    PyTorch Lightning data module
 
     Args:
         data_dir: root directory of your dataset.
@@ -30,8 +24,8 @@ class CelebADataModule(LightningDataModule):
 
     def __init__(
         self,
-        data_path: str=CelebA.Path.DATA,
-        batch_size: int=64,
+        data_path: str = CelebA.Path.ROOT,
+        batch_size: int = 64,
         patch_size: tuple[int, list[int]] = (64, 64),
         num_workers: int = 4,
         pin_memory: bool = True,
@@ -46,43 +40,50 @@ class CelebADataModule(LightningDataModule):
         self.num_workers = num_workers
         self.pin_memory = pin_memory
 
-    def setup(self, stage: str|None = None) -> None:
+    def setup(self, stage: str | None = None) -> None:
+        train_transforms = transforms.Compose(
+            [
+                transforms.RandomHorizontalFlip(),
+                transforms.CenterCrop(148),
+                transforms.Resize(self.patch_size),
+                transforms.ToTensor(),
+            ]
+        )
 
-        train_transforms = transforms.Compose([transforms.RandomHorizontalFlip(),
-                                              transforms.CenterCrop(148),
-                                              transforms.Resize(self.patch_size),
-                                              transforms.ToTensor(),])
-        
-        val_transforms = transforms.Compose([transforms.RandomHorizontalFlip(),
-                                            transforms.CenterCrop(148),
-                                            transforms.Resize(self.patch_size),
-                                            transforms.ToTensor(),])
+        val_transforms = transforms.Compose(
+            [
+                transforms.RandomHorizontalFlip(),
+                transforms.CenterCrop(148),
+                transforms.Resize(self.patch_size),
+                transforms.ToTensor(),
+            ]
+        )
+
         if stage in ("fit", None):
             self.train_dataset = CelebADataset(
                 self.data_dir,
-                split='train',
+                split="train",
                 transform=train_transforms,
                 download=False,
             )
-            
+
             # Replace CelebA with your dataset
             self.val_dataset = CelebADataset(
                 self.data_dir,
-                split='test',
+                split="test",
                 transform=val_transforms,
                 download=False,
-            
-        )
-        else : 
+            )
+        else:
             self.val_dataset = CelebADataset(
-            self.data_dir,
-            split='test',
-            transform=val_transforms,
-            download=False,
-        
-        )
-#       ===============================================================
-        
+                self.data_dir,
+                split="test",
+                transform=val_transforms,
+                download=False,
+            )
+
+    #       ===============================================================
+
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
             self.train_dataset,
@@ -100,7 +101,7 @@ class CelebADataModule(LightningDataModule):
             shuffle=False,
             pin_memory=self.pin_memory,
         )
-    
+
     def test_dataloader(self) -> tuple[DataLoader, list[DataLoader]]:
         return DataLoader(
             self.val_dataset,
@@ -109,4 +110,3 @@ class CelebADataModule(LightningDataModule):
             shuffle=True,
             pin_memory=self.pin_memory,
         )
-     

@@ -14,16 +14,19 @@ class MNISTDataModule(LightningDataModule):
     - dims: (C,H,W) exposée pour modèles/summary
     - num_classes: 10
     """
+
     name: str = "mnist"
 
-    def __init__(self, 
-                 batch_size: int=64, 
-                 num_workers: int=4, 
-                 pin_memory: bool=True, 
-                 val_ratio: float=0.1,
-                 to_rgb: bool=False, 
-                 normalize: bool=False, 
-                 drop_last: bool=False):
+    def __init__(
+        self,
+        batch_size: int = 64,
+        num_workers: int = 4,
+        pin_memory: bool = True,
+        val_ratio: float = 0.1,
+        to_rgb: bool = False,
+        normalize: bool = False,
+        drop_last: bool = False,
+    ):
         super().__init__()
 
         self._train: Optional[Dataset] = None
