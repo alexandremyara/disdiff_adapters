@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import Dataset
-from disdiff_adapters.arch.multi_distillme import *
+
+__all__ = ["LatentDataset"]
 
 
 class LatentDataset(Dataset):
