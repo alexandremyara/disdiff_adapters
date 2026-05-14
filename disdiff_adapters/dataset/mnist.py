@@ -6,6 +6,8 @@ from torch import Tensor
 from torch.utils.data import Dataset
 from torchvision import datasets, transforms
 
+__all__ = ["MNISTDataset"]
+
 
 class MNISTDataset(Dataset):
     """
